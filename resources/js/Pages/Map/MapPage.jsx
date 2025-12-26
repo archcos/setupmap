@@ -1,16 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ChevronDown, Menu, X, MapPin } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, ScaleControl, ZoomControl, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-const bounds = [
-  [7.5, 123.0],
-  [9.5, 125.5],
-];
-
-const expandedBounds = [
-  [7.0, 122.5],
+const mindanaoBounds = [
+  [5.0, 120.0],
   [10.0, 126.0],
 ];
 
@@ -50,7 +45,7 @@ const fallbackProvinceData = {
     area: '238.19',
     coords: [9.2, 124.7]
   },
-  'Lanao del Norte': {
+  'Lanao Del Norte': {
     code: '103500000',
     capital: 'Iligan City',
     area: '3,099',
@@ -133,9 +128,10 @@ function LoadingOverlay() {
   );
 }
 
-function NorthernMindanaoMap({ selectedProvince, terrain, onTerrainChange, provinces }) {
+function MindanaoMap({ selectedProvince, terrain, onTerrainChange, provinces }) {
   const [isLoading, setIsLoading] = useState(true);
   const currentTerrain = terrainTypes[terrain];
+  const mapRef = useRef(null);
 
   const customIcon = L.icon({
     iconUrl: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0Ij48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI4IiBmaWxsPSIjM2I4MmY2Ii8+PHBhdGggZD0iTTEyIDZjLTMuMyAwLTYgMi43LTYgNiAwaCAyYzAgNCAyLjQgNy4yIDUuMyA4LjUuNS4yIDEuNy4yIDIuNDAgMCAyLjktMS4zIDUuMy00LjUgNS4zLTguNSAwLTMuMy0yLjctNi02LTZ6bTAtMWMzLjkgMCA3IDMuMSA3IDcgMCA0LTIuNiA3LjItNiA4LjEtMy40LTEtNi00LjEtNi04LjEgMC0zLjkgMy4xLTcgNy03eiIgZmlsbD0id2hpdGUiLz48L3N2Zz4=',
@@ -148,15 +144,14 @@ function NorthernMindanaoMap({ selectedProvince, terrain, onTerrainChange, provi
     <div className="w-full h-full relative">
       {isLoading && <LoadingOverlay />}
       <MapContainer
-        bounds={bounds}
-        maxBounds={expandedBounds}
-        maxBoundsViscosity={0.8}
-        minZoom={7}
+        bounds={mindanaoBounds}
+        minZoom={6}
         maxZoom={18}
         scrollWheelZoom
         className="w-full h-full"
         zoomControl={false}
         whenReady={() => setIsLoading(false)}
+        ref={mapRef}
       >
         <TileLayer
           attribution={currentTerrain.attribution}
@@ -166,6 +161,9 @@ function NorthernMindanaoMap({ selectedProvince, terrain, onTerrainChange, provi
             loading: () => setIsLoading(true),
             load: () => setIsLoading(false),
           }}
+          minZoom={6}
+          maxZoom={18}
+          tileSize={256}
         />
 
         {Object.entries(provinces).map(([name, coords]) => (
@@ -196,7 +194,7 @@ export default function MapPage() {
   const [expandedCity, setExpandedCity] = useState(null);
   const [citiesLoading, setCitiesLoading] = useState(false);
   const [cities, setCities] = useState({});
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   useEffect(() => {
     const fetchProvinces = async () => {
@@ -216,7 +214,7 @@ export default function MapPage() {
         const nameMapping = {
           'Bukidnon': 'Bukidnon',
           'Camiguin': 'Camiguin',
-          'Lanao Del Norte': 'Lanao del Norte',
+          'Lanao Del Norte': 'Lanao Del Norte',
           'Misamis Occidental': 'Misamis Occidental',
           'Misamis Oriental': 'Misamis Oriental'
         };
@@ -343,7 +341,7 @@ export default function MapPage() {
       {/* Header */}
       <header className="shrink-0 px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md flex items-center justify-between z-50">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold">Northern Mindanao</h1>
+          <h1 className="text-xl sm:text-2xl font-bold">SETUP GPS Map</h1>
           <p className="text-blue-100 text-xs sm:text-sm">Interactive Province Map</p>
         </div>
         
@@ -402,9 +400,7 @@ export default function MapPage() {
                     {Object.entries(provinces).map(([name]) => (
                       <button
                         key={name}
-                        onClick={() => {
-                          handleProvinceClick(name);
-                        }}
+                        onClick={() => handleProvinceClick(name)}
                         className={`w-full py-1.5 sm:py-2 px-2 sm:px-3 text-left text-xs font-medium rounded-lg transition-all ${
                           selectedProvince === name
                             ? 'bg-blue-600 text-white shadow-md'
@@ -497,13 +493,13 @@ export default function MapPage() {
 
         {/* Map Container */}
         <main className="flex-1 relative bg-blue-50">
-          <NorthernMindanaoMap
+          <MindanaoMap
             selectedProvince={selectedProvinceCoords}
             terrain={terrain}
             onTerrainChange={setTerrain}
-            provinces={provinces && Object.keys(provinces).length > 0 ? Object.fromEntries(
+            provinces={Object.fromEntries(
               Object.entries(provinces).map(([name, data]) => [name, data.coords])
-            ) : {}}
+            )}
           />
         </main>
       </div>
