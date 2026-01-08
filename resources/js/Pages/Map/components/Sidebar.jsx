@@ -1,137 +1,93 @@
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, MapPin } from 'lucide-react';
 
-export default function Sidebar({
-  isOpen,
-  loading,
-  error,
-  provinces,
-  selectedProvince,
-  selectedProvinceData,
-  selectedCities,
-  citiesLoading,
-  expandedCity,
-  onProvinceClick,
-  onCityExpand,
+export function Sidebar({ 
+  sidebarCollapsed, 
+  error, 
+  equipmentsByProvince, 
+  expandedProvince, 
+  onToggleProvince, 
+  onEquipmentClick 
 }) {
   return (
-    <aside className={`fixed lg:static top-16 left-0 w-full sm:w-96 lg:w-80 h-[calc(100vh-4rem)] lg:h-full shrink-0 bg-white border-b lg:border-b-0 lg:border-r overflow-y-auto transition-all duration-300 z-40 ${
-      isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-    }`}>
-      <div className="p-3 sm:p-5">
-        {loading && (
-          <div className="text-center py-4 text-gray-500">
-            <p className="text-sm">Loading province data...</p>
-          </div>
-        )}
+    <>
+      {!sidebarCollapsed && (
+        <div
+          className="fixed inset-0 bg-black/30 lg:hidden z-30"
+          onClick={() => {} /* Handled by parent */}
+        />
+      )}
 
-        {error && (
-          <div className="text-center py-4 text-red-500 bg-red-50 rounded-lg">
-            <p className="text-xs">{error}</p>
-            <p className="text-xs mt-1">Using fallback data</p>
-          </div>
-        )}
-
-        {!loading && (
-          <>
-            {/* Provinces List */}
-            <div className="mb-6">
-              <h2 className="text-xs sm:text-sm font-bold text-gray-800 uppercase tracking-wide mb-4 flex items-center">
-                <span className="w-2 h-2 bg-blue-600 rounded-full mr-2"></span>
-                Provinces
-              </h2>
-              <div className="space-y-2">
-                {Object.entries(provinces).map(([name]) => (
-                  <button
-                    key={name}
-                    onClick={() => onProvinceClick(name)}
-                    className={`w-full py-2 sm:py-3 px-3 sm:px-4 text-left text-xs sm:text-sm font-medium rounded-lg transition-all ${
-                      selectedProvince === name
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                    }`}
-                  >
-                    {name}
-                  </button>
-                ))}
-              </div>
+      <aside className={`
+        relative z-40 lg:z-auto
+        bg-white border-r border-gray-200
+        overflow-y-auto
+        transition-all duration-300
+        ${sidebarCollapsed 
+          ? 'w-0' 
+          : 'w-56 sm:w-72 lg:w-80'
+        }
+      `}>
+        <div className="p-2 sm:p-4 h-full overflow-y-auto min-w-56 sm:min-w-72 lg:min-w-80">
+          {error && (
+            <div className="text-center py-4 text-red-500 bg-red-50 rounded-lg mb-4">
+              <p className="text-xs">{error}</p>
             </div>
+          )}
 
-            {/* Province Details Section */}
-            {selectedProvinceData && (
-              <div className="pt-4 border-t space-y-4">
-                {/* Province Info */}
-                <div>
-                  <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-3">Province Info</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="bg-blue-50 p-3 rounded-lg">
-                      <p className="text-xs text-gray-600">Capital</p>
-                      <p className="font-semibold text-gray-800">{selectedProvinceData.capital}</p>
-                    </div>
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <p className="text-xs text-gray-600">Area (km²)</p>
-                      <p className="font-semibold text-gray-800 text-xs">{selectedProvinceData.area}</p>
-                    </div>
-                  </div>
-                </div>
+          <div className="mb-6">
+            <h2 className="text-xs font-bold text-gray-800 uppercase tracking-wide mb-3 flex items-center">
+              <MapPin size={14} className="mr-2 text-blue-600" />
+              Equipment by Province
+            </h2>
+            
+            <div className="space-y-2">
+              {Object.entries(equipmentsByProvince).map(([province, equipmentList]) => (
+                <div key={province}>
+                  <button
+                    onClick={() => onToggleProvince(province)}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition text-sm font-semibold text-gray-800"
+                  >
+                    <span>{province}</span>
+                    <ChevronDown
+                      size={16}
+                      className={`transition-transform ${expandedProvince === province ? 'rotate-180' : ''}`}
+                    />
+                  </button>
 
-                {/* Cities Section */}
-                <div>
-                  <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-3">
-                    {citiesLoading ? 'Loading Cities...' : 'Cities & Municipalities'}
-                  </h3>
-                  
-                  {Object.keys(selectedCities).length > 0 ? (
-                    <div className="space-y-2 max-h-64 overflow-y-auto">
-                      {Object.entries(selectedCities).map(([cityName, cityData]) => (
-                        <div key={cityName} className="bg-gray-50 rounded-lg">
-                          <button
-                            onClick={() => onCityExpand(selectedProvince, cityName)}
-                            className="w-full flex items-center justify-between p-3 hover:bg-gray-100 transition"
+                  {expandedProvince === province && (
+                    <div className="mt-1 space-y-1 ml-2 border-l-2 border-blue-300 pl-2">
+                      {equipmentList.length > 0 ? (
+                        equipmentList.map((equipment) => (
+                          <div
+                            key={equipment.equipment_id}
+                            onClick={() => onEquipmentClick(equipment)}
+                            className="cursor-pointer bg-white border border-gray-200 rounded-lg p-2 hover:border-blue-400 hover:bg-blue-50 transition"
                           >
-                            <span className="text-xs font-semibold text-gray-800">{cityName}</span>
-                            <ChevronDown
-                              size={16}
-                              className={`transition-transform ${
-                                expandedCity === `${selectedProvince}-${cityName}` ? 'rotate-180' : ''
-                              }`}
-                            />
-                          </button>
-
-                          {expandedCity === `${selectedProvince}-${cityName}` && (
-                            <div className="border-t bg-white p-3">
-                              {cityData.barangays.length > 0 ? (
-                                <ul className="space-y-1">
-                                  {cityData.barangays.map((barangay) => (
-                                    <li key={barangay} className="text-xs text-gray-600 ml-2 before:content-['•'] before:mr-2">
-                                      {barangay}
-                                    </li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <p className="text-xs text-gray-500">Loading barangays...</p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                            <h3 className="font-semibold text-xs text-gray-800">{equipment.equipment_name}</h3>
+                            <p className="text-xs text-gray-600 mt-1">Owner: {equipment.owner}</p>
+                            {equipment.locations && equipment.locations.length > 0 ? (
+                              <div>
+                                <p className="text-xs text-green-600 mt-1 font-semibold">✓ Has Location</p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {new Date(equipment.locations[equipment.locations.length - 1].created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-gray-400 mt-1">No location data</p>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-gray-400 py-2">No equipment found</p>
+                      )}
                     </div>
-                  ) : citiesLoading ? (
-                    <p className="text-xs text-gray-500">Loading cities...</p>
-                  ) : (
-                    <p className="text-xs text-gray-500">Click on a province to load cities</p>
                   )}
                 </div>
-              </div>
-            )}
-
-            {!selectedProvinceData && (
-              <div className="pt-4 border-t text-center text-gray-500 text-sm">
-                <p>Select a province to view details</p>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </aside>
+              ))}
+            </div>
+          </div>
+        </div>
+      </aside>
+    </>
   );
 }

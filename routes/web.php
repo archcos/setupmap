@@ -2,30 +2,20 @@
 
 use App\Http\Controllers\Api\ProvinceController;
 use App\Http\Controllers\MapController;
-use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EquipmentController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
-});
 
-Route::get('/dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
-
-Route::middleware('auth')->group(function () {
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-});
+Route::get('/equipment', [EquipmentController::class, 'equipmentPage']); // Dashboard page
+Route::get('/equipment-utilization', [EquipmentController::class, 'utilizations']); // JSON API
+Route::get('/equipment/{equipmentId}/details', [EquipmentController::class, 'detailsPage']); // Details page
+Route::get('/equipment/{equipmentId}', [EquipmentController::class, 'show']); // JSON API
 
 Route::get('/map', [MapController::class, 'index']);
+Route::get('/', [DashboardController::class, 'index']);
+
 Route::get('/api/provinces/northern-mindanao', [ProvinceController::class, 'getNorthernMindanao']);
 require __DIR__.'/auth.php';
