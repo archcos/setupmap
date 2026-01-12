@@ -12,11 +12,11 @@ export default function MapPage({ equipments = [], locations = [], error: initia
   const [expandedProvince, setExpandedProvince] = useState(null);
 
   const equipmentsByProvince = {
-    'Misamis Oriental': [],
+    'Camiguin': [],
+    'Bukidnon': [],
     'Lanao Del Norte': [],
     'Misamis Occidental': [],
-    'Bukidnon': [],
-    'Camiguin': []
+    'Misamis Oriental': [],
   };
 
   equipments.forEach(eq => {

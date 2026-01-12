@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\SupabaseService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -27,14 +28,17 @@ class EquipmentController extends Controller
     /**
      * Get all equipment with calculated utilization data (JSON API)
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         try {
+            $startDate = $request->query('start_date');
+            $endDate = $request->query('end_date');
+
             $equipments = $this->supabaseService->getAllEquipments();
             $enrichedEquipments = [];
 
             foreach ($equipments as $equipment) {
-                $enrichedEquipments[] = $this->enrichEquipmentData($equipment);
+                $enrichedEquipments[] = $this->enrichEquipmentData($equipment, $startDate, $endDate);
             }
 
             return response()->json($enrichedEquipments);
@@ -46,7 +50,7 @@ class EquipmentController extends Controller
     /**
      * Get specific equipment with full data
      */
-    public function show(int $equipmentId): JsonResponse
+    public function show(int $equipmentId, Request $request): JsonResponse
     {
         try {
             $equipment = $this->supabaseService->getEquipmentById($equipmentId);
@@ -55,7 +59,10 @@ class EquipmentController extends Controller
                 return response()->json(['error' => 'Equipment not found'], 404);
             }
 
-            $enrichedEquipment = $this->enrichEquipmentData($equipment);
+            $startDate = $request->query('start_date');
+            $endDate = $request->query('end_date');
+
+            $enrichedEquipment = $this->enrichEquipmentData($equipment, $startDate, $endDate);
 
             return response()->json($enrichedEquipment);
         } catch (\Exception $e) {
@@ -63,7 +70,7 @@ class EquipmentController extends Controller
         }
     }
 
-    public function detailsPage(int $equipmentId): Response
+    public function detailsPage(int $equipmentId, Request $request): Response
     {
         $equipment = $this->supabaseService->getEquipmentById($equipmentId);
         
@@ -71,23 +78,30 @@ class EquipmentController extends Controller
             abort(404, 'Equipment not found');
         }
 
-        $enrichedEquipment = $this->enrichEquipmentData($equipment);
+        $startDate = $request->query('start_date');
+        $endDate = $request->query('end_date');
+
+        $enrichedEquipment = $this->enrichEquipmentData($equipment, $startDate, $endDate);
 
         return Inertia::render('Equipment/Details', [
             'equipment' => $enrichedEquipment
         ]);
     }
+
     /**
      * Get utilization data for dashboard (JSON API)
      */
-    public function utilizations(): JsonResponse
+    public function utilizations(Request $request): JsonResponse
     {
         try {
+            $startDate = $request->query('start_date');
+            $endDate = $request->query('end_date');
+
             $equipments = $this->supabaseService->getAllEquipments();
             $utilizationData = [];
 
             foreach ($equipments as $equipment) {
-                $enrichedEquipment = $this->enrichEquipmentData($equipment);
+                $enrichedEquipment = $this->enrichEquipmentData($equipment, $startDate, $endDate);
                 
                 $utilizationData[] = [
                     'equipment_id' => $enrichedEquipment['equipment_id'],
@@ -110,10 +124,10 @@ class EquipmentController extends Controller
     }
 
     /**
-     * Calculate utilization hours from utilization records
+     * Calculate utilization hours from utilization records within date range
      * 
      * Logic: Find consecutive TRUE records and calculate time until FALSE
-     * Sum all TRUE periods for the day
+     * Sum all TRUE periods within the specified date range
      */
     private function calculateUtilizationHours(array $utilizationRecords): float
     {
@@ -167,47 +181,94 @@ class EquipmentController extends Controller
     }
 
     /**
-     * Calculate daily utilization percentage (0-100%)
+     * Calculate utilization percentage based on date range
      */
-    private function calculateDailyUtilizationPercentage(array $utilizationRecords): float
+    private function calculateUtilizationPercentage(array $utilizationRecords, ?string $startDate, ?string $endDate): float
     {
         $hours = $this->calculateUtilizationHours($utilizationRecords);
-        $percentage = ($hours / 24) * 100;
+        
+        // Calculate total hours in the date range
+        if ($startDate && $endDate) {
+            $start = new \DateTime($startDate);
+            $end = new \DateTime($endDate);
+            $interval = $start->diff($end);
+            $totalHours = ($interval->days * 24) + $interval->h;
+        } else {
+            // Default to 24 hours if no date range provided
+            $totalHours = 24;
+        }
+
+        $percentage = $totalHours > 0 ? ($hours / $totalHours) * 100 : 0;
         
         return min($percentage, 100); // Cap at 100%
     }
 
     /**
+     * Filter records within a date range
+     */
+    private function filterRecordsByDateRange(array $records, ?string $startDate = null, ?string $endDate = null): array
+    {
+        if (!$startDate || !$endDate) {
+            // Default to today if no dates provided
+            return $this->filterTodaysRecords($records);
+        }
+
+        $start = new \DateTime($startDate);
+        $end = new \DateTime($endDate);
+        
+        return array_filter($records, function ($record) use ($start, $end) {
+            $recordDate = new \DateTime($record['created_at']);
+            return $recordDate >= $start && $recordDate < $end;
+        });
+    }
+
+    /**
+     * Filter records to only include today's data
+     */
+    private function filterTodaysRecords(array $records): array
+    {
+        $today = now()->startOfDay();
+        
+        return array_filter($records, function ($record) use ($today) {
+            $recordDate = (new \DateTime($record['created_at']))->format('Y-m-d');
+            return $recordDate === $today->format('Y-m-d');
+        });
+    }
+
+    /**
      * Enrich equipment data with utilization and power consumption info
      */
-    private function enrichEquipmentData(array $equipment): array
+    private function enrichEquipmentData(array $equipment, ?string $startDate = null, ?string $endDate = null): array
     {
         $equipmentId = $equipment['equipment_id'];
 
-        // Get utilization records
+        // Get utilization records filtered by date range
         $utilizationRecords = $this->supabaseService->getUtilizationByEquipmentId($equipmentId);
-        $utilizationHours = $this->calculateUtilizationHours($utilizationRecords);
-        $utilizationPercentage = $this->calculateDailyUtilizationPercentage($utilizationRecords);
+        $filteredUtilizationRecords = $this->filterRecordsByDateRange($utilizationRecords, $startDate, $endDate);
+        
+        $utilizationHours = $this->calculateUtilizationHours($filteredUtilizationRecords);
+        $utilizationPercentage = $this->calculateUtilizationPercentage($filteredUtilizationRecords, $startDate, $endDate);
         
         $isActive = false;
-        if (!empty($utilizationRecords)) {
-            $lastRecord = end($utilizationRecords);
+        if (!empty($filteredUtilizationRecords)) {
+            $lastRecord = end($filteredUtilizationRecords);
             $isActive = (bool) $lastRecord['type'] || $lastRecord['type'] === 1 || $lastRecord['type'] === '1';
         }
 
-        // Get power consumption records
+        // Get power consumption records - filter by date range
         $powerRecords = $this->supabaseService->getPowerConsumptionByEquipmentId($equipmentId);
+        $filteredPowerRecords = $this->filterRecordsByDateRange($powerRecords, $startDate, $endDate);
         
         $latestPower = null;
         $avgPower = 0;
 
-        if (!empty($powerRecords)) {
-            // Get latest power record
-            $latestPower = reset($powerRecords); // First record (already sorted by created_at desc)
+        if (!empty($filteredPowerRecords)) {
+            // Get latest power record from date range
+            $latestPower = reset($filteredPowerRecords);
             
-            // Calculate average power
-            $totalConsumption = array_sum(array_column($powerRecords, 'consumption'));
-            $avgPower = $totalConsumption / count($powerRecords);
+            // Calculate average power from records in date range
+            $totalConsumption = array_sum(array_column($filteredPowerRecords, 'consumption'));
+            $avgPower = $totalConsumption / count($filteredPowerRecords);
         }
 
         // Get location
