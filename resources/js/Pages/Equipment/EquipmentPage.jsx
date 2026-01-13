@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, Line } from 'recharts';
 import { ArrowRight, Activity, Zap, AlertCircle, MapPin, Calendar, ChevronDown, ArrowLeft } from 'lucide-react';
+import {Head} from '@inertiajs/react';
 
 export default function EquipmentPage() {
   const [allEquipmentData, setAllEquipmentData] = useState([]);
@@ -197,7 +198,7 @@ export default function EquipmentPage() {
   };
 
   const handleViewDetails = (equipmentId) => {
-    window.location.href = `/equipment/${equipmentId}`;
+    window.location.href = `/equipment/${equipmentId}/details`;
   };
 
   const filteredData = allEquipmentData.filter(equipment => {
@@ -233,6 +234,7 @@ export default function EquipmentPage() {
 
   return (
     <div className="w-full min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+        <Head title="Equipment Management"/>
       {/* Header */}
       <div className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 py-8">

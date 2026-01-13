@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import {Head} from '@inertiajs/react';
 import { PageHeader } from './components/PageHeader';
 import { Sidebar } from './components/Sidebar';
 import { MindanaoMap } from './components/MindanaoMap';
@@ -41,6 +42,7 @@ export default function MapPage({ equipments = [], locations = [], error: initia
 
   return (
     <div className="flex flex-col h-screen bg-white">
+    <Head title="SETUP Map"/>
       <PageHeader 
         sidebarCollapsed={sidebarCollapsed}
         onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
