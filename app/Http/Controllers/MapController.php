@@ -59,6 +59,7 @@ class MapController extends Controller
                 'equipments' => [],
                 'locations' => [],
                 'error' => 'Failed to load equipment and location data',
+                            'mapDataUrl' => '/equipment-map-data'
             ]);
         }
     }

@@ -285,7 +285,7 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
                           <Zap className="text-purple-600" size={20} />
                           <span className="text-gray-700 font-medium">Average Power</span>
                         </div>
-                        <span className="text-2xl font-bold text-purple-600">{equipment.avg_power_24h.toFixed(2)}W</span>
+                        <span className="text-2xl font-bold text-purple-600">{equipment.avg_power_8h.toFixed(2)}W</span>
                       </div>
                     </div>
                   </div>
@@ -303,12 +303,12 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
                     <div>
                       <div className="flex justify-between items-center mb-3">
                         <span className="text-lg font-semibold text-gray-900">Active Hours</span>
-                        <span className="text-3xl font-bold text-blue-600">{equipment.utilization_hours_24h.toFixed(1)}h</span>
+                        <span className="text-3xl font-bold text-blue-600">{equipment.utilization_hours_8h.toFixed(1)}h</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-4">
                         <div
                           className="bg-blue-600 h-4 rounded-full transition-all duration-300"
-                          style={{ width: `${Math.min(equipment.utilization_hours_24h / 24 * 100, 100)}%` }}
+                          style={{ width: `${Math.min(equipment.utilization_hours_8h / 8 * 100, 100)}%` }}
                         ></div>
                       </div>
                     </div>
@@ -316,12 +316,12 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
                     <div>
                       <div className="flex justify-between items-center mb-3">
                         <span className="text-lg font-semibold text-gray-900">Utilization Rate</span>
-                        <span className="text-3xl font-bold text-green-600">{equipment.utilization_percentage_24h.toFixed(1)}%</span>
+                        <span className="text-3xl font-bold text-green-600">{equipment.utilization_percentage_8h.toFixed(1)}%</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-4">
                         <div
                           className="bg-green-600 h-4 rounded-full transition-all duration-300"
-                          style={{ width: `${Math.min(equipment.utilization_percentage_24h, 100)}%` }}
+                          style={{ width: `${Math.min(equipment.utilization_percentage_8h, 100)}%` }}
                         ></div>
                       </div>
                     </div>
@@ -333,17 +333,17 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
                   <div className="space-y-4">
                     <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                       <p className="text-sm text-gray-600 font-medium">Total Active Hours</p>
-                      <p className="text-2xl font-bold text-blue-600 mt-2">{equipment.utilization_hours_24h.toFixed(2)}</p>
+                      <p className="text-2xl font-bold text-blue-600 mt-2">{equipment.utilization_hours_8h.toFixed(2)}</p>
                     </div>
 
                     <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                       <p className="text-sm text-gray-600 font-medium">Utilization Percentage</p>
-                      <p className="text-2xl font-bold text-green-600 mt-2">{equipment.utilization_percentage_24h.toFixed(2)}%</p>
+                      <p className="text-2xl font-bold text-green-600 mt-2">{equipment.utilization_percentage_8h.toFixed(2)}%</p>
                     </div>
 
                     <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                       <p className="text-sm text-gray-600 font-medium">Idle Hours</p>
-                      <p className="text-2xl font-bold text-gray-700 mt-2">{(24 - equipment.utilization_hours_24h).toFixed(2)}</p>
+                      <p className="text-2xl font-bold text-gray-700 mt-2">{(8 - equipment.utilization_hours_8h).toFixed(2)}</p>
                     </div>
                   </div>
                 </div>
@@ -370,7 +370,7 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
                         <Zap className="text-purple-600" size={24} />
                         <span className="text-gray-700 font-medium">Average Power</span>
                       </div>
-                      <p className="text-3xl font-bold text-purple-600 ml-9">{equipment.avg_power_24h.toFixed(2)}W</p>
+                      <p className="text-3xl font-bold text-purple-600 ml-9">{equipment.avg_power_8h.toFixed(2)}W</p>
                     </div>
                   </div>
                 </div>
@@ -381,10 +381,10 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
                     <div>
                       <p className="text-sm text-gray-600 font-medium mb-2">Consumption Difference</p>
                       <p className="text-2xl font-bold text-gray-900">
-                        {(equipment.power_consumption - equipment.avg_power_24h).toFixed(2)}W
+                        {(equipment.power_consumption - equipment.avg_power_8h).toFixed(2)}W
                       </p>
                       <p className="text-xs text-gray-600 mt-1">
-                        {equipment.power_consumption > equipment.avg_power_24h
+                        {equipment.power_consumption > equipment.avg_power_8h
                           ? 'Currently above average'
                           : 'Currently below average'}
                       </p>

@@ -10,7 +10,8 @@ use Inertia\Inertia;
 
 
 Route::get('/equipment', [EquipmentController::class, 'equipmentPage']); // Dashboard page
-Route::get('/equipment-utilization', [EquipmentController::class, 'utilizations']); // JSON API
+Route::get('/equipment-utilization', [EquipmentController::class, 'utilizations']); // JSON API for dashboard
+Route::get('/equipment-map-data', [EquipmentController::class, 'mapData']); // JSON API for map
 Route::get('/equipment/{equipmentId}/details', [EquipmentController::class, 'detailsPage']); // Details page
 Route::get('/equipment/{equipmentId}', [EquipmentController::class, 'show']); // JSON API
 

@@ -108,10 +108,10 @@ class EquipmentController extends Controller
                     'equipment_name' => $enrichedEquipment['equipment_name'],
                     'owner' => $enrichedEquipment['owner'],
                     'expected_location' => $enrichedEquipment['expected_location'],
-                    'utilization_percentage_24h' => $enrichedEquipment['utilization_percentage_24h'],
-                    'utilization_hours_24h' => $enrichedEquipment['utilization_hours_24h'],
+                    'utilization_percentage_8h' => $enrichedEquipment['utilization_percentage_8h'],
+                    'utilization_hours_8h' => $enrichedEquipment['utilization_hours_8h'],
                     'power_consumption' => $enrichedEquipment['power_consumption'],
-                    'avg_power_24h' => $enrichedEquipment['avg_power_24h'],
+                    'avg_power_8h' => $enrichedEquipment['avg_power_8h'],
                     'is_active' => $enrichedEquipment['is_active'],
                     'updated_at' => $enrichedEquipment['updated_at'],
                 ];
@@ -121,6 +121,87 @@ class EquipmentController extends Controller
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Get equipment data for map with locations and weekly utilization history
+     */
+    public function mapData(Request $request): JsonResponse
+    {
+        try {
+            $equipments = $this->supabaseService->getAllEquipments();
+            $mapData = [];
+
+            foreach ($equipments as $equipment) {
+                $equipmentId = $equipment['equipment_id'];
+
+                // Get locations for the equipment
+                $locations = $this->supabaseService->getLocationsByEquipmentId($equipmentId);
+
+                // Get utilization history for the past 7 days
+                $utilizationHistory = $this->getWeeklyUtilizationHistory($equipmentId);
+
+                // Get current utilization (today)
+                $today = now()->startOfDay();
+                $tomorrow = now()->addDay()->startOfDay();
+                $todayUtilization = $this->enrichEquipmentData(
+                    $equipment,
+                    $today->toIso8601String(),
+                    $tomorrow->toIso8601String()
+                );
+
+                if (!empty($locations)) {
+                    $mapData[] = [
+                        'equipment_id' => $equipment['equipment_id'],
+                        'equipment_name' => $equipment['equipment_name'] ?? "Equipment {$equipment['equipment_id']}",
+                        'owner' => $equipment['owner'] ?? 'N/A',
+                        'expected_location' => $equipment['expected_location'] ?? 'N/A',
+                        'power_consumption' => $todayUtilization['power_consumption'],
+                        'utilization_hours_8h' => $todayUtilization['utilization_hours_8h'],
+                        'utilization_percentage_8h' => $todayUtilization['utilization_percentage_8h'],
+                        'is_active' => $todayUtilization['is_active'],
+                        'locations' => $locations,
+                        'utilization_history' => $utilizationHistory,
+                    ];
+                }
+            }
+
+            return response()->json($mapData);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Get weekly utilization history for the past 7 days
+     */
+    private function getWeeklyUtilizationHistory(int $equipmentId): array
+    {
+        $utilizationRecords = $this->supabaseService->getUtilizationByEquipmentId($equipmentId);
+        $weeklyData = [];
+
+        // Get past 7 days
+        for ($i = 6; $i >= 0; $i--) {
+            $date = now()->subDays($i)->startOfDay();
+            $nextDay = $date->copy()->addDay()->startOfDay();
+            $dateKey = $date->format('Y-m-d');
+
+            // Filter records for this day
+            $dayRecords = array_filter($utilizationRecords, function ($record) use ($date, $nextDay) {
+                $recordDate = new \DateTime($record['created_at']);
+                return $recordDate >= $date && $recordDate < $nextDay;
+            });
+
+            // Calculate utilization percentage for the day
+            $utilizationPercentage = $this->calculateUtilizationPercentage(array_values($dayRecords), $date->toIso8601String(), $nextDay->toIso8601String());
+
+            $weeklyData[] = [
+                'date' => $dateKey,
+                'utilization_percentage_8h' => round($utilizationPercentage, 2),
+            ];
+        }
+
+        return $weeklyData;
     }
 
     /**
@@ -182,6 +263,7 @@ class EquipmentController extends Controller
 
     /**
      * Calculate utilization percentage based on date range
+     * Base is now 8 hours instead of 24 hours
      */
     private function calculateUtilizationPercentage(array $utilizationRecords, ?string $startDate, ?string $endDate): float
     {
@@ -192,10 +274,10 @@ class EquipmentController extends Controller
             $start = new \DateTime($startDate);
             $end = new \DateTime($endDate);
             $interval = $start->diff($end);
-            $totalHours = ($interval->days * 24) + $interval->h;
+            $totalHours = ($interval->days * 8) + ($interval->h > 8 ? 8 : $interval->h);
         } else {
-            // Default to 24 hours if no date range provided
-            $totalHours = 24;
+            // Default to 8 hours if no date range provided
+            $totalHours = 8;
         }
 
         $percentage = $totalHours > 0 ? ($hours / $totalHours) * 100 : 0;
@@ -228,10 +310,11 @@ class EquipmentController extends Controller
     private function filterTodaysRecords(array $records): array
     {
         $today = now()->startOfDay();
+        $tomorrow = now()->addDay()->startOfDay();
         
-        return array_filter($records, function ($record) use ($today) {
-            $recordDate = (new \DateTime($record['created_at']))->format('Y-m-d');
-            return $recordDate === $today->format('Y-m-d');
+        return array_filter($records, function ($record) use ($today, $tomorrow) {
+            $recordDate = new \DateTime($record['created_at']);
+            return $recordDate >= $today && $recordDate < $tomorrow;
         });
     }
 
@@ -252,7 +335,12 @@ class EquipmentController extends Controller
         $isActive = false;
         if (!empty($filteredUtilizationRecords)) {
             $lastRecord = end($filteredUtilizationRecords);
-            $isActive = (bool) $lastRecord['type'] || $lastRecord['type'] === 1 || $lastRecord['type'] === '1';
+            // Only consider active if there's data AND the last record is TRUE
+            $isActive = ($lastRecord['type'] === true || $lastRecord['type'] === 1 || $lastRecord['type'] === '1');
+        }
+        // If no data in the date range, equipment is inactive
+        if (empty($filteredUtilizationRecords)) {
+            $isActive = false;
         }
 
         // Get power consumption records - filter by date range
@@ -280,10 +368,10 @@ class EquipmentController extends Controller
             'equipment_name' => $equipment['equipment_name'] ?? "Equipment {$equipment['equipment_id']}",
             'owner' => $equipment['owner'] ?? 'N/A',
             'expected_location' => $equipment['expected_location'] ?? 'N/A',
-            'utilization_percentage_24h' => round($utilizationPercentage, 2),
-            'utilization_hours_24h' => round($utilizationHours, 2),
+            'utilization_percentage_8h' => round($utilizationPercentage, 2),
+            'utilization_hours_8h' => round($utilizationHours, 2),
             'power_consumption' => $latestPower ? round($latestPower['consumption'], 2) : 0,
-            'avg_power_24h' => round($avgPower, 2),
+            'avg_power_8h' => round($avgPower, 2),
             'is_active' => $isActive,
             'latest_location' => $latestLocation,
             'updated_at' => $latestPower['created_at'] ?? now()->toIso8601String(),

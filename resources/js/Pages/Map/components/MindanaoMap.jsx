@@ -1,35 +1,93 @@
-import { useState, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, ScaleControl, ZoomControl, Polyline } from 'react-leaflet';
+import { useState, useRef, useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, ScaleControl, ZoomControl, Polyline, Tooltip } from 'react-leaflet';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapPin, History, ArrowRight, Zap } from 'lucide-react';
+import { MapPin, History, ArrowRight, Zap, AlertCircle, Loader } from 'lucide-react';
+
+const tooltipStyles = `
+  .equipment-utilization-tooltip.leaflet-tooltip {
+    background-color: rgba(0, 0, 0, 0.85) !important;
+    border: none !important;
+    border-radius: 6px !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+    padding: 4px 8px !important;
+    color: white !important;
+    font-size: 12px !important;
+  }
+  
+  .equipment-utilization-tooltip.leaflet-tooltip::before {
+    display: none !important;
+  }
+`;
+
+if (typeof document !== 'undefined') {
+  const styleEl = document.createElement('style');
+  styleEl.innerHTML = tooltipStyles;
+  document.head.appendChild(styleEl);
+}
+
 import { MapController } from './MapController';
 import { MapControls } from './MapControls';
-import { LoadingOverlay } from './LoadingOverlay';
+import { LoadingOverlay } from '../../../Components/LoadingOverlay';
 import { northernMindanaoBounds, terrainTypes } from '../constants/mapConstants';
 
-export function MindanaoMap({ selectedLocation, terrain, onTerrainChange, locations = [], equipments = [] }) {
-  const [isLoading, setIsLoading] = useState(true);
+
+const ErrorOverlay = ({ error }) => (
+  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-red-50 to-red-100 absolute z-50">
+    <div className="bg-white p-8 rounded-lg shadow-xl text-center">
+      <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
+      <p className="text-red-600 font-semibold text-lg">Error Loading Data</p>
+      <p className="text-gray-600 text-sm mt-2">{error}</p>
+    </div>
+  </div>
+);
+
+export function MindanaoMap({ selectedLocation = null, terrain = 'street', onTerrainChange = () => {}, mapDataUrl = '/equipment-map-data' }) {
+  const [equipments, setEquipments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showHistory, setShowHistory] = useState({});
   const currentTerrain = terrainTypes[terrain];
   const mapRef = useRef(null);
 
-  // Create icon from lucide MapPin component
-  const createMapPinIcon = () => {
-    const svg = document.createElement('div');
-    svg.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="56" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3" fill="#ef4444"></circle></svg>';
+  // Fetch equipment data from API
+  useEffect(() => {
+    const fetchEquipmentData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await fetch(mapDataUrl);
+        if (!response.ok) throw new Error('Failed to fetch equipment data');
+        const data = await response.json();
+        setEquipments(data);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEquipmentData();
+  }, [mapDataUrl]);
+
+  const createMapPinIcon = (avgUtilization) => {
+    const utilizationPercent = Math.min(Math.round(avgUtilization), 100);
+    const color = utilizationPercent >= 80 ? '#10b981' : utilizationPercent >= 50 ? '#f59e0b' : '#ef4444';
+    
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="42" viewBox="0 0 32 42">
+      <path d="M16 1C7 1 0 8 0 17c0 7 16 24 16 24s16-17 16-24c0-9-7-16-16-16z" fill="${color}" stroke="white" stroke-width="1.5"/>
+      <circle cx="16" cy="16" r="5" fill="white"/>
+    </svg>`;
     
     return L.icon({
-      iconUrl: `data:image/svg+xml;base64,${btoa(svg.innerHTML)}`,
-      iconSize: [40, 56],
-      iconAnchor: [20, 56],
-      popupAnchor: [0, -56]
+      iconUrl: `data:image/svg+xml;base64,${btoa(svg)}`,
+      iconSize: [32, 42],
+      iconAnchor: [16, 42],
+      popupAnchor: [0, -42]
     });
   };
 
-  const equipmentIcon = createMapPinIcon();
-  
-  // Format UTC timestamp without timezone conversion
   const formatUTCTime = (timestamp) => {
     const date = new Date(timestamp);
     const year = date.getUTCFullYear();
@@ -39,19 +97,79 @@ export function MindanaoMap({ selectedLocation, terrain, onTerrainChange, locati
     const minutes = String(date.getUTCMinutes()).padStart(2, '0');
     const seconds = String(date.getUTCSeconds()).padStart(2, '0');
     const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12 || 12; // Convert to 12-hour format
+    hours = hours % 12 || 12;
     const hoursFormatted = String(hours).padStart(2, '0');
     
     return `${month}/${day}/${year}, ${hoursFormatted}:${minutes}:${seconds} ${ampm}`;
   };
 
-  const handleViewDetails = (equipmentId) => {
-    window.location.href = `/equipment/${equipmentId}/details`;
+  const formatDateShort = (timestamp) => {
+    const date = new Date(timestamp);
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return `${month}/${day}`;
   };
-  
+
+  const generateWeekData = (equipment) => {
+    const weekData = {};
+    const today = new Date();
+    
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const dateKey = date.toISOString().split('T')[0];
+      weekData[dateKey] = { date: dateKey, utilization: 0, count: 0 };
+    }
+
+    if (equipment.utilization_history && Array.isArray(equipment.utilization_history)) {
+      equipment.utilization_history.forEach(record => {
+        const dateKey = record.date?.split('T')[0];
+        if (dateKey && weekData[dateKey]) {
+          weekData[dateKey].utilization += parseFloat(record.utilization_percentage_8h || 0);
+          weekData[dateKey].count += 1;
+        }
+      });
+    }
+
+    return Object.values(weekData).map(day => ({
+      date: day.date,
+      dateShort: formatDateShort(day.date),
+      utilization: day.count > 0 ? Math.round(day.utilization / day.count) : 0
+    }));
+  };
+
+  const calculateWeeklyAverage = (equipment) => {
+    const weekData = generateWeekData(equipment);
+    if (weekData.length === 0) return 0;
+    const sum = weekData.reduce((acc, day) => acc + day.utilization, 0);
+    return Math.round(sum / weekData.length);
+  };
+
+  const handleViewDetails = (equipmentId) => {
+    console.log(`View details for equipment: ${equipmentId}`);
+  };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="w-full h-full relative">
+        <LoadingOverlay />
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="w-full h-full relative">
+        <ErrorOverlay error={error} />
+      </div>
+    );
+  }
+
+  // Render map only after data is loaded
   return (
     <div className="w-full h-full relative">
-      {isLoading && <LoadingOverlay />}
       <MapContainer
         bounds={northernMindanaoBounds}
         boundsOptions={{ padding: [50, 50] }}
@@ -60,17 +178,12 @@ export function MindanaoMap({ selectedLocation, terrain, onTerrainChange, locati
         scrollWheelZoom
         className="w-full h-full"
         zoomControl={false}
-        whenReady={() => setIsLoading(false)}
         ref={mapRef}
       >
         <TileLayer
           attribution={currentTerrain.attribution}
           url={currentTerrain.url}
           key={terrain}
-          eventHandlers={{
-            loading: () => setIsLoading(true),
-            load: () => setIsLoading(false),
-          }}
           minZoom={8}
           maxZoom={18}
           tileSize={256}
@@ -89,6 +202,10 @@ export function MindanaoMap({ selectedLocation, terrain, onTerrainChange, locati
             parseFloat(loc.latitude),
             parseFloat(loc.longitude)
           ]);
+
+          const weeklyAverage = calculateWeeklyAverage(equipment);
+          const weekData = generateWeekData(equipment);
+          const mapIcon = createMapPinIcon(weeklyAverage);
           
           return (
             <div key={`location-${equipment.equipment_id}`}>
@@ -127,10 +244,26 @@ export function MindanaoMap({ selectedLocation, terrain, onTerrainChange, locati
               
               <Marker
                 position={[parseFloat(latestLocation.latitude), parseFloat(latestLocation.longitude)]}
-                icon={equipmentIcon}
+                icon={mapIcon}
               >
-                <Popup className="text-xs max-w-xs">
-                  <div className="space-y-2">
+                <Tooltip 
+                  direction="top" 
+                  offset={[0, -30]}
+                  permanent
+                  className="equipment-utilization-tooltip"
+                >
+                  <div className="text-center">
+                    <div className="font-semibold text-xs leading-tight">
+                      {equipment.equipment_name}
+                    </div>
+                    <div className="font-bold text-sm">
+                      {weeklyAverage}%
+                    </div>
+                  </div>
+                </Tooltip>
+
+                <Popup className="text-xs max-w-sm">
+                  <div className="space-y-2 w-80">
                     <div>
                       <div className="font-semibold text-gray-900">{equipment.equipment_name}</div>
                       <div className="text-xs text-gray-600">Owner: {equipment.owner}</div>
@@ -147,7 +280,6 @@ export function MindanaoMap({ selectedLocation, terrain, onTerrainChange, locati
                       )}
                     </div>
 
-                    {/* Power Consumption Section */}
                     {equipment.power_consumption !== undefined && (
                       <div className="border-t border-gray-200 pt-2">
                         <div className="flex items-center gap-1 mb-1">
@@ -160,13 +292,47 @@ export function MindanaoMap({ selectedLocation, terrain, onTerrainChange, locati
                       </div>
                     )}
 
-                    {/* Utilization Section */}
-                    {equipment.utilization_hours_24h !== undefined && (
-                      <div className="border-t border-gray-200 pt-2">
-                        <div className="text-xs font-semibold text-gray-700 mb-1">Utilization</div>
-                        <div className="text-sm font-bold text-blue-600">
-                          {equipment.utilization_hours_24h.toFixed(1)}h ({equipment.utilization_percentage_24h.toFixed(1)}%)
+                    <div className="border-t border-gray-200 pt-2">
+                      <div className="text-xs font-semibold text-gray-700 mb-2">Weekly Avg Utilization</div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-lg font-bold text-blue-600">{weeklyAverage}%</div>
+                        <div className="flex-1 bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.min(weeklyAverage, 100)}%` }}
+                          ></div>
                         </div>
+                      </div>
+                    </div>
+
+                    {weekData.length > 0 && (
+                      <div className="border-t border-gray-200 pt-2">
+                        <div className="text-xs font-semibold text-gray-700 mb-2">7-Day Trend</div>
+                        <ResponsiveContainer width="100%" height={120}>
+                          <LineChart data={weekData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                            <XAxis 
+                              dataKey="dateShort" 
+                              tick={{ fontSize: 9 }}
+                            />
+                            <YAxis 
+                              domain={[0, 100]}
+                              tick={{ fontSize: 9 }}
+                            />
+                            <ChartTooltip 
+                              formatter={(value) => `${value}%`}
+                              contentStyle={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '4px', fontSize: '11px' }}
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="utilization" 
+                              stroke="#3b82f6" 
+                              dot={{ fill: '#3b82f6', r: 2 }}
+                              strokeWidth={1.5}
+                              isAnimationActive={false}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
                       </div>
                     )}
 
