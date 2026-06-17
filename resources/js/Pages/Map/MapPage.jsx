@@ -18,6 +18,59 @@ export default function MapPage({
     const [equipments, setEquipments] = useState(initialEquipments);
     const [locations, setLocations] = useState(initialLocations);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [currentDateTime, setCurrentDateTime] = useState(new Date());
+    const [sidebarFilter, setSidebarFilter] = useState('all');
+    const [searchQuery, setSearchQuery] = useState('');
+
+    // Update current time every minute
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCurrentDateTime(new Date());
+        }, 60000);
+        return () => clearInterval(timer);
+    }, []);
+
+    // Determine if equipment is active today
+    const isActiveToday = (equipment) => {
+        if (!equipment.locations || equipment.locations.length === 0) return false;
+        const latestLocation = equipment.locations[equipment.locations.length - 1];
+        const todayDateString = currentDateTime.toDateString();
+        return latestLocation?.created_at && 
+            new Date(latestLocation.created_at).toDateString() === todayDateString;
+    };
+
+    // Filter equipments based on sidebar filter AND search query
+    const filteredEquipments = equipments.filter(eq => {
+        // First apply the status filter
+        const active = isActiveToday(eq);
+        let passesStatusFilter = false;
+        switch (sidebarFilter) {
+            case 'active':
+                passesStatusFilter = active;
+                break;
+            case 'inactive':
+                passesStatusFilter = !active;
+                break;
+            case 'all':
+            default:
+                passesStatusFilter = true;
+        }
+        
+        if (!passesStatusFilter) return false;
+        
+        // Then apply search filter
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase().trim();
+            const nameMatch = (eq.equipment_name || '').toLowerCase().includes(query);
+            const ownerMatch = (eq.owner || '').toLowerCase().includes(query);
+            const locationMatch = (eq.expected_location || '').toLowerCase().includes(query);
+            const idMatch = String(eq.equipment_id || '').includes(query);
+            
+            return nameMatch || ownerMatch || locationMatch || idMatch;
+        }
+        
+        return true;
+    });
 
     // Group equipments by province using expected_location
     const equipmentsByProvince = {};
@@ -27,7 +80,7 @@ export default function MapPage({
         equipmentsByProvince[province] = [];
     });
 
-    equipments.forEach(eq => {
+    filteredEquipments.forEach(eq => {
         const provinceName = provinceMapping[eq.expected_location];
         if (provinceName && equipmentsByProvince[provinceName]) {
             equipmentsByProvince[provinceName].push(eq);
@@ -35,13 +88,21 @@ export default function MapPage({
     });
 
     const handleEquipmentClick = (equipment) => {
-        if (equipment.latest_location) {
+        // Get the LATEST location (last in the array)
+        if (equipment.locations && equipment.locations.length > 0) {
+            const latestLocation = equipment.locations[equipment.locations.length - 1];
             setSelectedLocation([
-                equipment.latest_location.latitude,
-                equipment.latest_location.longitude
+                parseFloat(latestLocation.latitude),
+                parseFloat(latestLocation.longitude)
+            ]);
+        } else if (equipment.latest_location) {
+            // Fallback to latest_location if locations array is empty
+            setSelectedLocation([
+                parseFloat(equipment.latest_location.latitude),
+                parseFloat(equipment.latest_location.longitude)
             ]);
         }
-        setSidebarCollapsed(true);
+        // Don't close sidebar
     };
 
     const toggleProvince = (province) => {
@@ -95,13 +156,14 @@ export default function MapPage({
 
     return (
         <div className="flex flex-col h-screen bg-white">
-            <Head title="SETUP Map" />
+            <Head title="SETUP Map - Equipment Tracking" />
             
             <PageHeader 
                 sidebarCollapsed={sidebarCollapsed}
                 onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
                 onRefresh={refreshData}
                 isRefreshing={isRefreshing}
+                currentDateTime={currentDateTime}
             />
 
             <div className="flex-1 flex overflow-hidden bg-white">
@@ -111,6 +173,14 @@ export default function MapPage({
                     expandedProvince={expandedProvince}
                     onToggleProvince={toggleProvince}
                     onEquipmentClick={handleEquipmentClick}
+                    currentDateTime={currentDateTime}
+                    filter={sidebarFilter}
+                    onFilterChange={setSidebarFilter}
+                    allEquipments={equipments}
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
+                    filteredCount={filteredEquipments.length}
+                    totalCount={equipments.length}
                 />
 
                 <main className="flex-1 relative bg-blue-50">
@@ -120,6 +190,7 @@ export default function MapPage({
                         onTerrainChange={setTerrain}
                         locations={locations}
                         equipments={equipments}
+                        currentDateTime={currentDateTime}
                     />
                 </main>
             </div>

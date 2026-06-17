@@ -3,7 +3,7 @@ import {
   ArrowLeft, Activity, Zap, MapPin, Clock, User, AlertCircle, 
   Calendar, TrendingUp, Power, RefreshCw, Loader, Cpu, Info
 } from 'lucide-react';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip, Legend, ResponsiveContainer
@@ -31,6 +31,16 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
   const [dateRangeLabel, setDateRangeLabel] = useState('');
   const [isSingleDay, setIsSingleDay] = useState(true);
   const abortControllerRef = useRef(null);
+
+  // Handle back navigation using browser history
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      // Fallback to map page if no history
+      router.visit('/map');
+    }
+  };
 
   const fetchEquipmentData = useCallback(async (start, end) => {
     if (!equipment?.equipment_id) return;
@@ -129,9 +139,13 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
         <div className="bg-white p-8 rounded-lg shadow-md text-center max-w-md">
           <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
           <p className="text-red-600 font-semibold text-lg">Equipment not found</p>
-          <a href="/equipment" className="mt-4 inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-            Back to Equipment
-          </a>
+          <button
+            onClick={handleGoBack}
+            className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <ArrowLeft size={18} />
+            Go Back
+          </button>
         </div>
       </div>
     );
@@ -146,10 +160,14 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <a href="/equipment" className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors text-sm font-medium">
+              <button
+                onClick={handleGoBack}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors text-sm font-medium"
+                title="Go back to previous page"
+              >
                 <ArrowLeft size={18} />
                 <span className="hidden sm:inline">Back</span>
-              </a>
+              </button>
               <div>
                 <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{equipment.equipment_name}</h1>
                 <p className="text-sm text-gray-500">ID: {equipment.equipment_id}</p>
