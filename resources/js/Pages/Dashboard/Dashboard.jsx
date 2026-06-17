@@ -57,56 +57,59 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-100 flex items-center justify-center p-4 sm:p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 flex items-center justify-center p-4">
       <audio ref={audioRef} src={LogoSong} />
-      <div className="w-full max-w-5xl">
-        {/* Enhanced Header Section */}
-        <div className="text-center mb-10 sm:mb-12 md:mb-16">
-          {/* Main Logo */}
-          <div className="mb-6 sm:mb-8 transform transition-transform duration-500 hover:scale-110 cursor-pointer" onMouseEnter={playLogoSound} onClick={playLogoSound}>
+      
+      <div className="w-full max-w-4xl">
+        {/* Header - More Compact */}
+        <div className="text-center mb-8">
+          <div 
+            className="inline-block mb-3 transition-transform duration-300 hover:scale-110 cursor-pointer"
+            onMouseEnter={playLogoSound} 
+            onClick={playLogoSound}
+          >
             <img 
               src={Logo} 
               alt="Logo" 
-              className="h-20 sm:h-24 md:h-28 mx-auto drop-shadow-lg"
+              className="h-16 md:h-20 mx-auto"
             />
           </div>
 
-          {/* Title with Enhanced Styling */}
-          <div className="mb-4 sm:mb-6">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent drop-shadow-sm mb-3 sm:mb-4 tracking-tight">
-              DOST Northern Mindanao
-            </h1>
-            <div className="h-1 sm:h-1.5 w-24 sm:w-32 mx-auto bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full shadow-md"></div>
-          </div>
-
-          {/* Setup Logo */}
-          <div className="mt-6 sm:mt-8 transform transition-transform duration-500 hover:scale-105 cursor-pointer" onMouseEnter={playLogoSound} onClick={playLogoSound}>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent mb-1">
+            DOST Northern Mindanao
+          </h1>
+          
+          <div className="h-0.5 w-20 mx-auto bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full mb-3"></div>
+          
+          <div 
+            className="inline-block transition-transform duration-300 hover:scale-105 cursor-pointer"
+            onMouseEnter={playLogoSound} 
+            onClick={playLogoSound}
+          >
             <img 
               src={SetupLogo} 
               alt="Setup Logo" 
-              className="h-16 sm:h-18 md:h-20 mx-auto drop-shadow-md"
+              className="h-12 md:h-14 mx-auto opacity-80 hover:opacity-100 transition-opacity"
             />
           </div>
         </div>
 
-        {/* Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
+        {/* Cards - More Compact Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-5">
           {/* Equipment Data Button */}
           <button
             onClick={handleEquipmentClick}
             onMouseEnter={playEquipmentSound}
-            className="group relative bg-white rounded-xl sm:rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:scale-105 active:scale-95 p-6 sm:p-8 md:p-10 border-2 border-transparent hover:border-blue-400 overflow-hidden"
+            className="group relative bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 active:scale-95 p-6 md:p-7 border border-slate-200/60 hover:border-blue-300/50 overflow-hidden"
           >
-            {/* Animated background glow */}
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-200/20 rounded-full blur-3xl group-hover:bg-blue-200/40 transition-all duration-500"></div>
-
-            <div className="relative flex flex-col items-center text-center space-y-3 sm:space-y-4">
-              <div className="bg-gradient-to-br from-blue-100 to-blue-50 p-3 sm:p-4 md:p-5 rounded-full group-hover:from-blue-200 group-hover:to-blue-100 transition-all duration-500 shadow-md group-hover:shadow-lg transform group-hover:scale-110">
-                <Zap className="w-10 sm:w-12 md:w-14 h-10 sm:h-12 md:h-14 text-blue-600 group-hover:text-blue-700 transition-colors" />
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            
+            <div className="relative flex flex-col items-center text-center space-y-2.5">
+              <div className="bg-gradient-to-br from-blue-100 to-blue-50/80 p-2.5 rounded-xl group-hover:from-blue-200/80 group-hover:to-blue-100/80 transition-all duration-300 shadow-sm group-hover:shadow-md group-hover:scale-110">
+                <Zap className="w-8 h-8 text-blue-600 group-hover:text-blue-700 transition-colors" strokeWidth={1.8} />
               </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-800 group-hover:text-blue-700 transition-colors">Equipment Data</h2>
-              <p className="text-sm sm:text-base text-gray-600 group-hover:text-gray-700 transition-colors">View and manage equipment information</p>
+              <h2 className="text-lg font-semibold text-slate-800 group-hover:text-blue-700 transition-colors">Equipment Data</h2>
+              <p className="text-sm text-slate-500 group-hover:text-slate-600 transition-colors">Manage equipment inventory</p>
             </div>
           </button>
 
@@ -114,18 +117,16 @@ export default function Dashboard() {
           <button
             onClick={handleMapClick}
             onMouseEnter={playLocationSound}
-            className="group relative bg-white rounded-xl sm:rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:scale-105 active:scale-95 p-6 sm:p-8 md:p-10 border-2 border-transparent hover:border-green-400 overflow-hidden"
+            className="group relative bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 active:scale-95 p-6 md:p-7 border border-slate-200/60 hover:border-emerald-300/50 overflow-hidden"
           >
-            {/* Animated background glow */}
-            <div className="absolute inset-0 bg-gradient-to-br from-green-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            <div className="absolute -top-20 -right-20 w-40 h-40 bg-green-200/20 rounded-full blur-3xl group-hover:bg-green-200/40 transition-all duration-500"></div>
-
-            <div className="relative flex flex-col items-center text-center space-y-3 sm:space-y-4">
-              <div className="bg-gradient-to-br from-green-100 to-green-50 p-3 sm:p-4 md:p-5 rounded-full group-hover:from-green-200 group-hover:to-green-100 transition-all duration-500 shadow-md group-hover:shadow-lg transform group-hover:scale-110">
-                <MapPin className="w-10 sm:w-12 md:w-14 h-10 sm:h-12 md:h-14 text-green-600 group-hover:text-green-700 transition-colors" />
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            
+            <div className="relative flex flex-col items-center text-center space-y-2.5">
+              <div className="bg-gradient-to-br from-emerald-100 to-emerald-50/80 p-2.5 rounded-xl group-hover:from-emerald-200/80 group-hover:to-emerald-100/80 transition-all duration-300 shadow-sm group-hover:shadow-md group-hover:scale-110">
+                <MapPin className="w-8 h-8 text-emerald-600 group-hover:text-emerald-700 transition-colors" strokeWidth={1.8} />
               </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-800 group-hover:text-green-700 transition-colors">Location Tracking</h2>
-              <p className="text-sm sm:text-base text-gray-600 group-hover:text-gray-700 transition-colors">Track equipment locations on the map</p>
+              <h2 className="text-lg font-semibold text-slate-800 group-hover:text-emerald-700 transition-colors">Equipment Tracking</h2>
+              <p className="text-sm text-slate-500 group-hover:text-slate-600 transition-colors">Track equipment on map</p>
             </div>
           </button>
         </div>

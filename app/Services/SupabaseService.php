@@ -459,9 +459,62 @@ public function getCompleteEquipmentData(): array
         }
     }
 
-    /**
-     * Get average power consumption for equipment over time period (in hours).
-     */
+/**
+ * Get equipment with all relations in a SINGLE query
+ * This is much faster than making 4 separate API calls
+ */
+public function getEquipmentWithAllRelations(int $equipmentId): ?array
+{
+    Log::info('Fetching equipment with all relations (single query)', ['equipment_id' => $equipmentId]);
+
+    try {
+        // Single query with all joins
+        $response = Http::withHeaders($this->getHeaders())
+            ->timeout($this->httpTimeout)
+            ->get($this->url . '/rest/v1/tbl_equipments', [
+                'equipment_id' => 'eq.' . $equipmentId,
+                'select' => '*,locations:tbl_locations(*),power_consumptions:tbl_powerconsumptions(consumption,created_at),utilizations:tbl_utilizations(type,created_at)',
+                'limit' => 1,
+            ]);
+
+        $data = $this->handleResponse($response);
+        $result = $data[0] ?? null;
+
+        if ($result) {
+            // Sort nested arrays in PHP (Supabase returns them unsorted)
+            if (isset($result['power_consumptions']) && is_array($result['power_consumptions'])) {
+                usort($result['power_consumptions'], function($a, $b) {
+                    return strtotime($b['created_at'] ?? '0') - strtotime($a['created_at'] ?? '0');
+                });
+            }
+            
+            if (isset($result['utilizations']) && is_array($result['utilizations'])) {
+                usort($result['utilizations'], function($a, $b) {
+                    return strtotime($b['created_at'] ?? '0') - strtotime($a['created_at'] ?? '0');
+                });
+            }
+
+            Log::info('Successfully fetched equipment with all relations', [
+                'equipment_id' => $equipmentId,
+                'locations_count' => count($result['locations'] ?? []),
+                'power_count' => count($result['power_consumptions'] ?? []),
+                'util_count' => count($result['utilizations'] ?? [])
+            ]);
+        } else {
+            Log::warning('Equipment not found with relations', ['equipment_id' => $equipmentId]);
+        }
+
+        return $result;
+    } catch (\Exception $e) {
+        Log::error('Failed to fetch equipment with relations', [
+            'equipment_id' => $equipmentId,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        throw $e;
+    }
+}
+
 /**
  * Get average power consumption for equipment over time period (in hours).
  */

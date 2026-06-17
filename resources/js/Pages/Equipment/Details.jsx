@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   ArrowLeft, Activity, Zap, MapPin, Clock, User, AlertCircle, 
-  Calendar, TrendingUp, Power, RefreshCw, Loader, Cpu, Info
+  Calendar, TrendingUp, RefreshCw, Loader, Cpu, Info
 } from 'lucide-react';
 import { Head, router } from '@inertiajs/react';
 import {
@@ -30,6 +30,7 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
   });
   const [dateRangeLabel, setDateRangeLabel] = useState('');
   const [isSingleDay, setIsSingleDay] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const abortControllerRef = useRef(null);
 
   // Handle back navigation using browser history
@@ -37,7 +38,6 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
     if (window.history.length > 1) {
       window.history.back();
     } else {
-      // Fallback to map page if no history
       router.visit('/map');
     }
   };
@@ -78,6 +78,30 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
     }
   }, [equipment?.equipment_id]);
 
+  // Process initial data from page load
+  const processInitialData = useCallback(() => {
+    if (!equipment || !isInitialLoad) return;
+    
+    const now = new Date();
+    const start = getStartOfDay(now);
+    const end = getEndOfDay(now);
+    setDateRangeLabel(formatDateRangeLabel(now, now, true));
+    
+    // Check if we already have the needed data from the page load
+    if (equipment.power_consumptions && equipment.utilizations) {
+      const processed = processHistoryData(equipment, start, end);
+      setUtilizationData(processed.utilization);
+      setPowerData(processed.power);
+      setStats(processed.stats);
+      setIsSingleDay(processed.isSingleDay);
+      setIsInitialLoad(false);
+    } else {
+      // Fallback to API fetch if data wasn't included in page load
+      fetchEquipmentData(start, end);
+      setIsInitialLoad(false);
+    }
+  }, [equipment, isInitialLoad, fetchEquipmentData]);
+
   const handleQuickRange = useCallback((days) => {
     const end = new Date();
     const endStr = getEndOfDay(end);
@@ -117,21 +141,16 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
     fetchEquipmentData(start, end);
   }, [startDate, endDate, fetchEquipmentData]);
 
+  // Process initial data on mount
   useEffect(() => {
-    if (equipment) {
-      const now = new Date();
-      const start = getStartOfDay(now);
-      const end = getEndOfDay(now);
-      setDateRangeLabel(formatDateRangeLabel(now, now, true));
-      fetchEquipmentData(start, end);
-    }
+    processInitialData();
     
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
     };
-  }, []);
+  }, []); // Only run once on mount
 
   if (!equipment) {
     return (
