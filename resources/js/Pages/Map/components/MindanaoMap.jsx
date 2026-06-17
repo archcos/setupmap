@@ -52,24 +52,29 @@ export function MindanaoMap({ selectedLocation = null, terrain = 'street', onTer
   const mapRef = useRef(null);
 
   // Fetch equipment data from API
-  useEffect(() => {
-    const fetchEquipmentData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await fetch(mapDataUrl);
-        if (!response.ok) throw new Error('Failed to fetch equipment data');
-        const data = await response.json();
-        setEquipments(data);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchEquipmentData();
-  }, [mapDataUrl]);
+// In MindanaoMap.jsx, modify the useEffect:
+useEffect(() => {
+    // Only fetch if equipments is empty (no SSR data passed)
+    if (!equipments || equipments.length === 0) {
+        const fetchEquipmentData = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+                const response = await fetch(mapDataUrl);
+                if (!response.ok) throw new Error('Failed to fetch equipment data');
+                const data = await response.json();
+                setEquipments(data.equipments || data || []);
+            } catch (err) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchEquipmentData();
+    } else {
+        setLoading(false); // Data already provided via props
+    }
+}, [mapDataUrl, equipments]);
 
   const createMapPinIcon = (avgUtilization) => {
     const utilizationPercent = Math.min(Math.round(avgUtilization), 100);

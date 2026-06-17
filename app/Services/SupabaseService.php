@@ -13,6 +13,7 @@ class SupabaseService
     private string $key;
     private int $cacheTtl = 300; // 5 minutes
     private bool $cacheEnabled = true;
+private int $httpTimeout = 30;
 
     public function __construct()
     {
@@ -21,7 +22,8 @@ class SupabaseService
 
         // Check if cache is available
         try {
-            Cache::get('test_cache_key');
+        Cache::put('test_cache_key', 'test', 1);
+        Cache::forget('test_cache_key');
         } catch (\Exception $e) {
             $this->cacheEnabled = false;
             Log::warning('Cache disabled - using fallback', [
@@ -41,23 +43,37 @@ class SupabaseService
     /**
      * Safe cache remember with fallback.
      */
-    private function cacheRemember(string $key, int $ttl, callable $callback)
-    {
-        if (!$this->cacheEnabled) {
-            Log::info('Cache bypassed', ['key' => $key]);
-            return $callback();
+private function cacheRemember(string $key, int $ttl, callable $callback)
+{
+    if (!$this->cacheEnabled) {
+        Log::info('Cache bypassed - disabled', ['key' => $key]);
+        return $callback();
+    }
+
+    try {
+        if (Cache::has($key)) {
+            $cachedData = Cache::get($key);
+            Log::info('Cache HIT', [
+                'key' => $key,
+                'data_count' => is_array($cachedData) ? count($cachedData) : 'scalar'
+            ]);
+            return $cachedData;
         }
 
-        try {
-            return Cache::remember($key, $ttl, $callback);
-        } catch (\Exception $e) {
-            Log::error('Cache operation failed, using fallback', [
-                'key' => $key,
-                'error' => $e->getMessage()
-            ]);
-            return $callback();
-        }
+        Log::info('Cache MISS - fetching fresh data', ['key' => $key]);
+        
+        $data = $callback();
+        Cache::put($key, $data, $ttl);
+        
+        return $data;
+    } catch (\Exception $e) {
+        Log::error('Cache operation failed, using fallback', [
+            'key' => $key,
+            'error' => $e->getMessage()
+        ]);
+        return $callback();
     }
+}
 
     // ==================== EQUIPMENT METHODS ====================
 
@@ -72,7 +88,9 @@ class SupabaseService
             Log::info('Cache miss - fetching all equipments from Supabase API');
             
             $response = Http::withHeaders($this->getHeaders())
-                ->get($this->url.'/rest/v1/tbl_equipments');
+            ->timeout($this->httpTimeout)
+            ->get($this->url.'/rest/v1/tbl_equipments');
+
 
             $result = $this->handleResponse($response);
             
@@ -125,38 +143,42 @@ class SupabaseService
  */
 public function getCompleteEquipmentData(): array
 {
+    $cacheKey = 'complete_equipment_data';
+    
     Log::info('Fetching complete equipment data with relations');
 
-    return $this->cacheRemember('complete_equipment_data', $this->cacheTtl, function () {
-        Log::info('Cache miss - fetching complete equipment data from Supabase API');
+    return $this->cacheRemember($cacheKey, $this->cacheTtl, function () {
+        Log::info('Executing Supabase API call for complete equipment data');
 
         try {
-            // IMPORTANT: Supabase select parameter must be a single line with NO line breaks
-            // The select string must be clean with only single spaces between elements
             $select = '*,locations:tbl_locations(*),power_consumptions:tbl_powerconsumptions(consumption,created_at),utilizations:tbl_utilizations(type,created_at)';
             
-            // Add ordering using the proper syntax
+            $startTime = microtime(true);
+            
             $response = Http::withHeaders($this->getHeaders())
+                ->timeout($this->httpTimeout)
+                ->retry(2, 1000)
                 ->get($this->url.'/rest/v1/tbl_equipments', [
                     'select' => $select,
-                    'order' => 'created_at.desc', // Order the main query
-                    // Note: Ordering of nested resources needs to be in the select parameter
-                    // but we can also try with explicit ordering
                 ]);
+
+            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            
+            Log::info('Supabase API call completed', [
+                'duration_ms' => $duration,
+                'status' => $response->status()
+            ]);
 
             $result = $this->handleResponse($response);
             
-            // If the above doesn't work with ordering on nested relations,
-            // we might need to sort the results in PHP instead
+            // Sort nested arrays in PHP
             foreach ($result as &$equipment) {
-                // Sort power consumptions by created_at desc
                 if (isset($equipment['power_consumptions']) && is_array($equipment['power_consumptions'])) {
                     usort($equipment['power_consumptions'], function($a, $b) {
                         return strtotime($b['created_at'] ?? '0') - strtotime($a['created_at'] ?? '0');
                     });
                 }
                 
-                // Sort utilizations by created_at desc
                 if (isset($equipment['utilizations']) && is_array($equipment['utilizations'])) {
                     usort($equipment['utilizations'], function($a, $b) {
                         return strtotime($b['created_at'] ?? '0') - strtotime($a['created_at'] ?? '0');
@@ -165,7 +187,8 @@ public function getCompleteEquipmentData(): array
             }
             
             Log::info('Successfully fetched complete equipment data', [
-                'equipment_count' => count($result)
+                'equipment_count' => count($result),
+                'duration_ms' => $duration
             ]);
 
             return $result;
@@ -439,49 +462,56 @@ public function getCompleteEquipmentData(): array
     /**
      * Get average power consumption for equipment over time period (in hours).
      */
-    public function getAveragePowerConsumption(int $equipmentId, int $hours = 24): float
-    {
-        Log::info('Calculating average power consumption', [
+/**
+ * Get average power consumption for equipment over time period (in hours).
+ */
+public function getAveragePowerConsumption(int $equipmentId, int $hours = 24): float
+{
+    Log::info('Calculating average power consumption', [
+        'equipment_id' => $equipmentId,
+        'hours' => $hours
+    ]);
+
+    try {
+        // Fix: Use proper PostgreSQL interval syntax
+        $response = Http::withHeaders($this->getHeaders())
+            ->get($this->url.'/rest/v1/tbl_powerconsumptions', [
+                'equipment_id' => 'eq.'.$equipmentId,
+                'created_at' => 'gte.' . now()->subHours($hours)->toIso8601String(),
+                'select' => 'consumption'
+            ]);
+
+        $data = $this->handleResponse($response);
+
+        if (empty($data)) {
+            Log::warning('No power consumption data for average calculation', [
+                'equipment_id' => $equipmentId,
+                'hours' => $hours
+            ]);
+            return 0;
+        }
+
+        $total = array_sum(array_column($data, 'consumption'));
+        $average = $total / count($data);
+
+        Log::info('Calculated average power consumption', [
             'equipment_id' => $equipmentId,
-            'hours' => $hours
+            'hours' => $hours,
+            'average' => $average,
+            'record_count' => count($data)
         ]);
 
-        try {
-            $response = Http::withHeaders($this->getHeaders())
-                ->get($this->url.'/rest/v1/tbl_powerconsumptions?equipment_id=eq.'.$equipmentId.
-                      '&created_at=gte.now-'.$hours.'hours&select=consumption');
-
-            $data = $this->handleResponse($response);
-
-            if (empty($data)) {
-                Log::warning('No power consumption data for average calculation', [
-                    'equipment_id' => $equipmentId,
-                    'hours' => $hours
-                ]);
-                return 0;
-            }
-
-            $total = array_sum(array_column($data, 'consumption'));
-            $average = $total / count($data);
-
-            Log::info('Calculated average power consumption', [
-                'equipment_id' => $equipmentId,
-                'hours' => $hours,
-                'average' => $average,
-                'record_count' => count($data)
-            ]);
-
-            return $average;
-        } catch (\Exception $e) {
-            Log::error('Failed to calculate average power consumption', [
-                'equipment_id' => $equipmentId,
-                'hours' => $hours,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            throw $e;
-        }
+        return $average;
+    } catch (\Exception $e) {
+        Log::error('Failed to calculate average power consumption', [
+            'equipment_id' => $equipmentId,
+            'hours' => $hours,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        throw $e;
     }
+}
 
     /**
      * Create power consumption record.
@@ -631,50 +661,57 @@ public function getCompleteEquipmentData(): array
     /**
      * Get utilization percentage (active records) for equipment.
      */
-    public function getUtilizationPercentage(int $equipmentId, int $hours = 24): float
-    {
-        Log::info('Calculating utilization percentage', [
+/**
+ * Get utilization percentage (active records) for equipment.
+ */
+public function getUtilizationPercentage(int $equipmentId, int $hours = 24): float
+{
+    Log::info('Calculating utilization percentage', [
+        'equipment_id' => $equipmentId,
+        'hours' => $hours
+    ]);
+
+    try {
+        // Fix: Use proper PostgreSQL interval syntax
+        $response = Http::withHeaders($this->getHeaders())
+            ->get($this->url.'/rest/v1/tbl_utilizations', [
+                'equipment_id' => 'eq.'.$equipmentId,
+                'created_at' => 'gte.' . now()->subHours($hours)->toIso8601String(),
+                'select' => 'type'
+            ]);
+
+        $data = $this->handleResponse($response);
+
+        if (empty($data)) {
+            Log::warning('No utilization data for percentage calculation', [
+                'equipment_id' => $equipmentId,
+                'hours' => $hours
+            ]);
+            return 0;
+        }
+
+        $activeCount = count(array_filter($data, fn ($record) => $record['type'] === true));
+        $percentage = ($activeCount / count($data)) * 100;
+
+        Log::info('Calculated utilization percentage', [
             'equipment_id' => $equipmentId,
-            'hours' => $hours
+            'hours' => $hours,
+            'percentage' => $percentage,
+            'active_count' => $activeCount,
+            'total_count' => count($data)
         ]);
 
-        try {
-            $response = Http::withHeaders($this->getHeaders())
-                ->get($this->url.'/rest/v1/tbl_utilizations?equipment_id=eq.'.$equipmentId.
-                      '&created_at=gte.now-'.$hours.'hours&select=type');
-
-            $data = $this->handleResponse($response);
-
-            if (empty($data)) {
-                Log::warning('No utilization data for percentage calculation', [
-                    'equipment_id' => $equipmentId,
-                    'hours' => $hours
-                ]);
-                return 0;
-            }
-
-            $activeCount = count(array_filter($data, fn ($record) => $record['type'] === true));
-            $percentage = ($activeCount / count($data)) * 100;
-
-            Log::info('Calculated utilization percentage', [
-                'equipment_id' => $equipmentId,
-                'hours' => $hours,
-                'percentage' => $percentage,
-                'active_count' => $activeCount,
-                'total_count' => count($data)
-            ]);
-
-            return $percentage;
-        } catch (\Exception $e) {
-            Log::error('Failed to calculate utilization percentage', [
-                'equipment_id' => $equipmentId,
-                'hours' => $hours,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            throw $e;
-        }
+        return $percentage;
+    } catch (\Exception $e) {
+        Log::error('Failed to calculate utilization percentage', [
+            'equipment_id' => $equipmentId,
+            'hours' => $hours,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        throw $e;
     }
+}
 
     /**
      * Create utilization record.
@@ -803,22 +840,23 @@ public function getCompleteEquipmentData(): array
     /**
      * Clear all caches.
      */
-    public function clearAllCache(): void
-    {
-        Log::info('Clearing all caches');
-        
-        try {
-            Cache::flush();
-            Log::info('All caches cleared successfully');
-        } catch (\Exception $e) {
-            Log::error('Failed to clear all caches', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            throw $e;
-        }
+public function clearAllCache(): void
+{
+    Log::info('Clearing all caches');
+    
+    try {
+        Cache::forget('complete_equipment_data');
+        Cache::forget('all_equipments');
+        Cache::forget('equipments_with_locations');
+        Log::info('All caches cleared successfully');
+    } catch (\Exception $e) {
+        Log::error('Failed to clear all caches', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        throw $e;
     }
-
+}
     /**
      * Clear equipment-related caches.
      */
@@ -930,7 +968,6 @@ public function getCompleteEquipmentData(): array
                 'status' => $response->status(),
                 'body' => $response->body(),
                 'url' => $response->effectiveUri() ?? 'unknown',
-                'headers' => $response->headers(),
             ]);
 
             if ($response->status() === 404) {

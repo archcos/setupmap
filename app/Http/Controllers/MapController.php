@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\SupabaseService;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class MapController extends Controller
 {
@@ -19,6 +20,7 @@ class MapController extends Controller
 
         try {
             // Get ALL equipment data in ONE API call with nested relations
+            // This includes locations, power_consumptions, and utilizations
             $equipmentsWithRelations = $this->supabase->getCompleteEquipmentData();
             Log::info('Fetched equipment data', ['count' => count($equipmentsWithRelations)]);
 
@@ -26,9 +28,14 @@ class MapController extends Controller
             $transformedEquipments = $this->transformEquipmentData($equipmentsWithRelations);
             Log::info('Transformed equipment data', ['count' => count($transformedEquipments)]);
 
-            // Get all locations for the map
-            $locations = $this->supabase->getAllLocations();
-            Log::info('Fetched locations', ['count' => count($locations)]);
+            // Extract locations from the already-fetched data - NO SECOND API CALL!
+            $locations = [];
+            foreach ($equipmentsWithRelations as $equipment) {
+                if (!empty($equipment['locations'])) {
+                    $locations = array_merge($locations, $equipment['locations']);
+                }
+            }
+            Log::info('Extracted locations from equipment data', ['count' => count($locations)]);
 
             return Inertia::render('Map/MapPage', [
                 'equipments' => $transformedEquipments,
@@ -51,20 +58,16 @@ class MapController extends Controller
 
     /**
      * Transform equipment data for the map view
-     * This processes the nested data from Supabase.
      */
     private function transformEquipmentData(array $equipments): array
     {
-        Log::debug('Transforming equipment data', ['equipment_count' => count($equipments)]);
-
         $transformed = array_map(function ($equipment) {
             try {
-                // Get nested relations from the single API call
                 $locations = $equipment['locations'] ?? [];
                 $powerConsumptions = $equipment['power_consumptions'] ?? [];
                 $utilizationRecords = $equipment['utilizations'] ?? [];
 
-                $result = [
+                return [
                     'equipment_id' => $equipment['equipment_id'] ?? 'Unknown',
                     'equipment_name' => $equipment['equipment_name'] ?? 'Unknown',
                     'owner' => $equipment['owner'] ?? 'Unknown',
@@ -75,15 +78,6 @@ class MapController extends Controller
                     'utilization_percentage_24h' => $this->calculateUtilizationPercentage($utilizationRecords),
                     'latest_location' => $this->getLatestLocation($locations),
                 ];
-
-                Log::debug('Transformed equipment', [
-                    'equipment_id' => $equipment['equipment_id'] ?? 'Unknown',
-                    'location_count' => count($locations),
-                    'power_consumption_count' => count($powerConsumptions),
-                    'utilization_count' => count($utilizationRecords)
-                ]);
-
-                return $result;
             } catch (\Exception $e) {
                 Log::error('Failed to transform equipment data', [
                     'equipment_id' => $equipment['equipment_id'] ?? 'unknown',
@@ -93,14 +87,7 @@ class MapController extends Controller
             }
         }, $equipments);
 
-        // Filter out null values from failed transformations
-        $filtered = array_filter($transformed);
-        Log::debug('Equipment transformation complete', [
-            'input_count' => count($equipments),
-            'output_count' => count($filtered)
-        ]);
-
-        return $filtered;
+        return array_filter($transformed);
     }
 
     /**
@@ -111,8 +98,6 @@ class MapController extends Controller
         if (empty($powerConsumptions)) {
             return 0;
         }
-
-        // Already sorted by created_at desc from Supabase
         return (float) ($powerConsumptions[0]['consumption'] ?? 0);
     }
 
@@ -125,26 +110,15 @@ class MapController extends Controller
             return null;
         }
 
-        try {
-            // Already sorted by created_at desc from Supabase
-            $latest = $locations[0];
-
-            return [
-                'latitude' => (float) ($latest['latitude'] ?? 0),
-                'longitude' => (float) ($latest['longitude'] ?? 0),
-            ];
-        } catch (\Exception $e) {
-            Log::error('Failed to get latest location', [
-                'error' => $e->getMessage()
-            ]);
-            return null;
-        }
+        $latest = $locations[0];
+        return [
+            'latitude' => (float) ($latest['latitude'] ?? 0),
+            'longitude' => (float) ($latest['longitude'] ?? 0),
+        ];
     }
 
     /**
      * Calculate utilization hours from utilization records
-     * Logic: Find consecutive TRUE records and calculate time until FALSE
-     * Only considers records from the last 24 hours.
      */
     private function calculateUtilizationHours(array $utilizationRecords): float
     {
@@ -153,25 +127,15 @@ class MapController extends Controller
         }
 
         try {
-            // Filter records from last 24 hours
             $twentyFourHoursAgo = now()->subHours(24);
             $recentRecords = array_filter($utilizationRecords, function ($record) use ($twentyFourHoursAgo) {
-                try {
-                    return strtotime($record['created_at']) >= $twentyFourHoursAgo->timestamp;
-                } catch (\Exception $e) {
-                    Log::error('Error parsing date in utilization records', [
-                        'created_at' => $record['created_at'] ?? 'null',
-                        'error' => $e->getMessage()
-                    ]);
-                    return false;
-                }
+                return strtotime($record['created_at']) >= $twentyFourHoursAgo->timestamp;
             });
 
             if (empty($recentRecords)) {
                 return 0;
             }
 
-            // Sort by created_at ascending for calculation
             usort($recentRecords, function ($a, $b) {
                 return strtotime($a['created_at']) - strtotime($b['created_at']);
             });
@@ -180,48 +144,35 @@ class MapController extends Controller
             $i = 0;
 
             while ($i < count($recentRecords)) {
-                // Check if record is active (type = true/1)
                 $isActive = in_array($recentRecords[$i]['type'], [true, 1, '1', 'true'], true);
 
                 if ($isActive) {
                     $startTime = new \DateTime($recentRecords[$i]['created_at']);
                     $j = $i + 1;
 
-                    // Find consecutive active records
                     while ($j < count($recentRecords)) {
                         $nextIsActive = in_array($recentRecords[$j]['type'], [true, 1, '1', 'true'], true);
-                        if (!$nextIsActive) {
-                            break;
-                        }
-                        ++$j;
+                        if (!$nextIsActive) break;
+                        $j++;
                     }
 
-                    // Calculate end time
-                    if ($j < count($recentRecords)) {
-                        // Found an inactive record
-                        $endTime = new \DateTime($recentRecords[$j]['created_at']);
-                        $i = $j + 1;
-                    } else {
-                        // End of array - use current time if still active
-                        $endTime = now();
-                        $i = $j;
-                    }
+                    $endTime = ($j < count($recentRecords)) 
+                        ? new \DateTime($recentRecords[$j]['created_at']) 
+                        : now();
+                    
+                    $i = ($j < count($recentRecords)) ? $j + 1 : $j;
 
-                    // Calculate duration in hours
                     $interval = $startTime->diff($endTime);
                     $hours = $interval->h + ($interval->days * 24) + ($interval->i / 60) + ($interval->s / 3600);
                     $totalHours += $hours;
                 } else {
-                    ++$i;
+                    $i++;
                 }
             }
 
             return round(min($totalHours, 24), 2);
         } catch (\Exception $e) {
-            Log::error('Failed to calculate utilization hours', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
+            Log::error('Failed to calculate utilization hours', ['error' => $e->getMessage()]);
             return 0;
         }
     }
@@ -231,28 +182,28 @@ class MapController extends Controller
      */
     private function calculateUtilizationPercentage(array $utilizationRecords): float
     {
-        try {
-            $hours = $this->calculateUtilizationHours($utilizationRecords);
-            $percentage = ($hours / 24) * 100;
-            return round(min($percentage, 100), 2);
-        } catch (\Exception $e) {
-            Log::error('Failed to calculate utilization percentage', [
-                'error' => $e->getMessage()
-            ]);
-            return 0;
-        }
+        $hours = $this->calculateUtilizationHours($utilizationRecords);
+        return round(min(($hours / 24) * 100, 100), 2);
     }
 
     /**
-     * API endpoint for refreshing map data.
+     * API endpoint for map data - Uses SAME cached data
      */
     public function getMapData(): \Illuminate\Http\JsonResponse
     {
         Log::info('API: Fetching map data');
 
         try {
+            // Use the SAME cached method
             $equipments = $this->supabase->getCompleteEquipmentData();
-            $locations = $this->supabase->getAllLocations();
+            
+            // Extract locations from cached data
+            $locations = [];
+            foreach ($equipments as $equipment) {
+                if (!empty($equipment['locations'])) {
+                    $locations = array_merge($locations, $equipment['locations']);
+                }
+            }
 
             $transformedEquipments = $this->transformEquipmentData($equipments);
 
@@ -268,7 +219,6 @@ class MapController extends Controller
         } catch (\Exception $e) {
             Log::error('API: Failed to fetch map data', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
             ]);
 
             return response()->json([
@@ -279,29 +229,20 @@ class MapController extends Controller
     }
 
     /**
-     * Clear cache for map data (useful after updates).
+     * Clear cache for map data
      */
     public function clearCache(): \Illuminate\Http\JsonResponse
     {
         Log::info('API: Clearing map data cache');
 
         try {
-            $this->supabase->clearAllCache();
+            Cache::forget('complete_equipment_data');
             Log::info('API: Cache cleared successfully');
 
-            return response()->json([
-                'message' => 'Cache cleared successfully',
-            ]);
+            return response()->json(['message' => 'Cache cleared successfully']);
         } catch (\Exception $e) {
-            Log::error('API: Failed to clear cache', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'error' => 'Failed to clear cache',
-                'message' => $e->getMessage(),
-            ], 500);
+            Log::error('API: Failed to clear cache', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed to clear cache'], 500);
         }
     }
 }
