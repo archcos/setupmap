@@ -33,7 +33,7 @@ export function PageHeader({
                 </button>
                 
                 <div>
-                    <h1 className="text-xl sm:text-2xl font-bold">SETUP GPS Map</h1>
+                    <h1 className="text-xl sm:text-2xl font-bold">SETUP E-MAP</h1>
                     <p className="text-blue-100 text-xs sm:text-sm">
                         Today's Equipment Tracking & Locations
                     </p>
