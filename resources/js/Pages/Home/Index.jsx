@@ -5,7 +5,7 @@ import Logo from '@/../../resources/assets/logo.webp';
 import LogoSong from '@/../../resources/assets/LOGOSONG.mp3';
 import { Head } from '@inertiajs/react';
 
-export default function Dashboard() {
+export default function Index() {
   const audioRef = useRef(null);
   const [logoHovered, setLogoHovered] = useState(false);
   const [setupLogoHovered, setSetupLogoHovered] = useState(false);

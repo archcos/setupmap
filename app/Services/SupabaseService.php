@@ -1053,4 +1053,490 @@ public function clearAllCache(): void
 
         return $data;
     }
+
+    // ==================== PASSWORD HASHING HELPERS ====================
+
+/**
+ * Verify password against stored hash and salt.
+ */
+private function verifyPassword(string $password, string $salt, string $storedHash): bool
+{
+    $hashedPassword = hash('sha256', $password . $salt);
+    return hash_equals($storedHash, $hashedPassword);
+}
+
+// ==================== USER/AUTHENTICATION METHODS ====================
+
+/**
+ * Authenticate user with email/username and password.
+ */
+public function authenticateUser(string $emailOrUsername, string $password): ?array
+{
+    Log::info('Authenticating user', ['identifier' => $emailOrUsername]);
+
+    try {
+        // Get user by email or username
+        $response = Http::withHeaders($this->getHeaders())
+            ->get($this->url.'/rest/v1/tbl_users', [
+                'or' => '(email.eq.' . $emailOrUsername . ',username.eq.' . $emailOrUsername . ')',
+                'limit' => 1,
+                'select' => 'user_id,email,username,password,password_salt,first_name,middle_name,last_name,office,last_login,current_login'
+            ]);
+
+        $data = $this->handleResponse($response);
+        $user = $data[0] ?? null;
+
+        if (!$user) {
+            Log::warning('Authentication failed - user not found', ['identifier' => $emailOrUsername]);
+            return null;
+        }
+
+        // Get salt and stored hash
+        $salt = $user['password_salt'] ?? '';
+        $storedHash = $user['password'] ?? '';
+        
+        if (empty($salt) || empty($storedHash)) {
+            Log::error('User account missing password hash or salt', [
+                'user_id' => $user['user_id']
+            ]);
+            return null;
+        }
+
+        // Verify password
+        if (!$this->verifyPassword($password, $salt, $storedHash)) {
+            Log::warning('Authentication failed - invalid password', [
+                'user_id' => $user['user_id']
+            ]);
+            return null;
+        }
+
+        // Update login timestamps
+        $now = now()->toIso8601String();
+        Http::withHeaders($this->getHeaders())
+            ->patch($this->url.'/rest/v1/tbl_users?user_id=eq.' . $user['user_id'], [
+                'last_login' => $user['current_login'] ?? $now,
+                'current_login' => $now,
+            ]);
+
+        Log::info('User authenticated successfully', [
+            'user_id' => $user['user_id'],
+            'email' => $user['email']
+        ]);
+
+        // Remove sensitive data before returning
+        unset($user['password']);
+        unset($user['password_salt']);
+        
+        return $user;
+    } catch (\Exception $e) {
+        Log::error('Authentication error', [
+            'identifier' => $emailOrUsername,
+            'error' => $e->getMessage()
+        ]);
+        throw $e;
+    }
+}
+
+/**
+ * Get user by ID (without sensitive data).
+ */
+public function getUserById(int $userId): ?array
+{
+    Log::info('Fetching user by ID', ['user_id' => $userId]);
+
+    try {
+        $response = Http::withHeaders($this->getHeaders())
+            ->get($this->url.'/rest/v1/tbl_users', [
+                'user_id' => 'eq.' . $userId,
+                'limit' => 1,
+                'select' => 'user_id,email,username,first_name,middle_name,last_name,office,last_login,current_login,created_at'
+            ]);
+
+        $data = $this->handleResponse($response);
+        return $data[0] ?? null;
+    } catch (\Exception $e) {
+        Log::error('Failed to fetch user', [
+            'user_id' => $userId,
+            'error' => $e->getMessage()
+        ]);
+        throw $e;
+    }
+}
+
+/**
+ * Validate user session/token.
+ */
+public function validateUserSession(int $userId): bool
+{
+    Log::info('Validating user session', ['user_id' => $userId]);
+
+    try {
+        $user = $this->getUserById($userId);
+        return !is_null($user);
+    } catch (\Exception $e) {
+        Log::error('Session validation failed', [
+            'user_id' => $userId,
+            'error' => $e->getMessage()
+        ]);
+        return false;
+    }
+}
+
+// ==================== EQUIPMENT MANAGEMENT METHODS ====================
+
+/**
+ * Create new equipment with initial location.
+ */
+/**
+ * Update equipment.
+ */
+public function updateEquipment(int $equipmentId, array $equipmentData): ?array
+{
+    Log::info('Updating equipment', ['equipment_id' => $equipmentId]);
+
+    try {
+        $payload = array_merge($equipmentData, [
+            'updated_at' => now()->toIso8601String(),
+        ]);
+
+        $response = Http::withHeaders($this->getHeaders())
+            ->patch($this->url.'/rest/v1/tbl_equipments?equipment_id=eq.' . $equipmentId, $payload);
+
+        $equipment = $this->handleResponse($response)[0] ?? null;
+
+        // Clear caches
+        $this->clearEquipmentCache($equipmentId);
+        Cache::forget('complete_equipment_data');
+
+        Log::info('Equipment updated successfully', ['equipment_id' => $equipmentId]);
+
+        return $equipment;
+    } catch (\Exception $e) {
+        Log::error('Failed to update equipment', [
+            'equipment_id' => $equipmentId,
+            'error' => $e->getMessage()
+        ]);
+        throw $e;
+    }
+}
+
+/**
+ * Update equipment initial location.
+ */
+public function updateInitialLocation(int $equipmentId, float $latitude, float $longitude): ?array
+{
+    Log::info('Updating initial location', ['equipment_id' => $equipmentId]);
+
+    try {
+        // Check if initial location exists
+        $existingResponse = Http::withHeaders($this->getHeaders())
+            ->get($this->url.'/rest/v1/tbl_locations', [
+                'equipment_id' => 'eq.' . $equipmentId,
+                'type' => 'eq.0',
+                'limit' => 1,
+            ]);
+
+        $existing = $this->handleResponse($existingResponse)[0] ?? null;
+
+        if ($existing) {
+            // Update existing location
+            $response = Http::withHeaders($this->getHeaders())
+                ->patch($this->url.'/rest/v1/tbl_locations?location_id=eq.' . $existing['location_id'], [
+                    'latitude' => (string) $latitude,
+                    'longitude' => (string) $longitude,
+                ]);
+        } else {
+            // Create new initial location
+            $response = Http::withHeaders($this->getHeaders())
+                ->post($this->url.'/rest/v1/tbl_locations', [
+                    'equipment_id' => $equipmentId,
+                    'latitude' => (string) $latitude,
+                    'longitude' => (string) $longitude,
+                    'type' => '0',
+                    'created_at' => now()->toIso8601String(),
+                ]);
+        }
+
+        $location = $this->handleResponse($response)[0] ?? null;
+
+        Log::info('Initial location updated successfully', [
+            'equipment_id' => $equipmentId,
+            'latitude' => $latitude,
+            'longitude' => $longitude
+        ]);
+
+        return $location;
+    } catch (\Exception $e) {
+        Log::error('Failed to update initial location', [
+            'equipment_id' => $equipmentId,
+            'error' => $e->getMessage()
+        ]);
+        throw $e;
+    }
+}
+
+/**
+ * Get all equipment for admin (with initial locations).
+ */
+public function getAllEquipmentsForAdmin(): array
+{
+    Log::info('Fetching all equipment for admin');
+
+    try {
+        $response = Http::withHeaders($this->getHeaders())
+            ->timeout($this->httpTimeout)
+            ->get($this->url.'/rest/v1/tbl_equipments', [
+                'select' => '*,locations:tbl_locations(*)',
+                'order' => 'equipment_id.asc',
+            ]);
+
+        $result = $this->handleResponse($response);
+
+        // Add initial location to each equipment
+        foreach ($result as &$equipment) {
+            $initialLocation = null;
+            if (isset($equipment['locations']) && is_array($equipment['locations'])) {
+                foreach ($equipment['locations'] as $location) {
+                    if ($location['type'] === '0') {
+                        $initialLocation = $location;
+                        break;
+                    }
+                }
+            }
+            $equipment['initial_location'] = $initialLocation;
+            unset($equipment['locations']); // Remove all locations, keep only initial
+        }
+
+        Log::info('Successfully fetched equipment for admin', [
+            'count' => count($result)
+        ]);
+
+        return $result;
+    } catch (\Exception $e) {
+        Log::error('Failed to fetch equipment for admin', [
+            'error' => $e->getMessage()
+        ]);
+        throw $e;
+    }
+}
+/**
+ * Get all projects.
+ */
+public function getAllProjects(): array
+{
+    Log::info('Fetching all projects');
+
+    return $this->cacheRemember('all_projects', $this->cacheTtl, function () {
+        Log::info('Cache miss - fetching projects from Supabase API');
+
+        try {
+            $response = Http::withHeaders($this->getHeaders())
+                ->get($this->url.'/rest/v1/tbl_projects', [
+                    'order' => 'project_id.asc',
+                ]);
+
+            $result = $this->handleResponse($response);
+            
+            Log::info('Successfully fetched projects', [
+                'count' => count($result)
+            ]);
+
+            return $result;
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch projects', [
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
+        }
+    });
+}
+
+/**
+ * Get next equipment ID for a project (4-digit format).
+ */
+public function getNextEquipmentId(int $projectId): string
+{
+    Log::info('Getting next equipment ID for project', ['project_id' => $projectId]);
+
+    try {
+        // Get all equipment IDs for this project
+        $response = Http::withHeaders($this->getHeaders())
+            ->get($this->url.'/rest/v1/tbl_equipments', [
+                'project_id' => 'eq.' . $projectId,
+                'select' => 'equipment_id',
+                'order' => 'equipment_id.asc',
+            ]);
+
+        $equipments = $this->handleResponse($response);
+        
+        if (empty($equipments)) {
+            // First equipment for this project
+            $nextId = (int)($projectId . '0001');
+            Log::info('First equipment ID generated', ['next_id' => $nextId]);
+            return (string) $nextId;
+        }
+
+        // Get the last equipment ID
+        $lastEquipment = end($equipments);
+        $lastId = (int)$lastEquipment['equipment_id'];
+        
+        // Extract the 4-digit suffix
+        $projectPrefix = (string)$projectId;
+        $lastIdStr = (string)$lastId;
+        
+        if (strpos($lastIdStr, $projectPrefix) === 0) {
+            $suffix = (int)substr($lastIdStr, strlen($projectPrefix));
+            $nextSuffix = $suffix + 1;
+            $nextId = (int)($projectPrefix . str_pad($nextSuffix, 4, '0', STR_PAD_LEFT));
+        } else {
+            // Fallback
+            $nextId = (int)($projectId . '0001');
+        }
+
+        Log::info('Next equipment ID generated', [
+            'project_id' => $projectId,
+            'next_id' => $nextId,
+            'last_id' => $lastId
+        ]);
+
+        return (string) $nextId;
+    } catch (\Exception $e) {
+        Log::error('Failed to get next equipment ID', [
+            'project_id' => $projectId,
+            'error' => $e->getMessage()
+        ]);
+        throw $e;
+    }
+}
+
+/**
+ * Update the createEquipment method to use project-based IDs.
+ */
+public function createEquipment(array $equipmentData, ?array $locationData = null): ?array
+{
+    Log::info('Creating new equipment', ['name' => $equipmentData['equipment_name'] ?? 'unknown']);
+
+    try {
+        $projectId = $equipmentData['project_id'] ?? null;
+        
+        if (!$projectId) {
+            throw new \Exception('Project ID is required');
+        }
+
+        // Get next equipment ID for this project
+        $nextId = $this->getNextEquipmentId($projectId);
+
+        // Create equipment
+        $equipmentPayload = array_merge($equipmentData, [
+            'equipment_id' => (int) $nextId,
+            'created_at' => now()->toIso8601String(),
+            'updated_at' => now()->toIso8601String(),
+        ]);
+
+        $response = Http::withHeaders($this->getHeaders())
+            ->post($this->url.'/rest/v1/tbl_equipments', $equipmentPayload);
+
+        $equipment = $this->handleResponse($response)[0] ?? null;
+
+        if ($equipment && $locationData) {
+            // Create initial location (type = '0')
+            $locationPayload = array_merge($locationData, [
+                'equipment_id' => (int) $nextId,
+                'type' => '0',
+                'created_at' => now()->toIso8601String(),
+            ]);
+
+            Http::withHeaders($this->getHeaders())
+                ->post($this->url.'/rest/v1/tbl_locations', $locationPayload);
+        }
+
+        // Clear caches
+        $this->clearEquipmentCache();
+        Cache::forget('complete_equipment_data');
+
+        Log::info('Equipment created successfully', [
+            'equipment_id' => $nextId,
+            'project_id' => $projectId,
+            'name' => $equipmentData['equipment_name'] ?? 'unknown'
+        ]);
+
+        return $equipment;
+    } catch (\Exception $e) {
+        Log::error('Failed to create equipment', [
+            'name' => $equipmentData['equipment_name'] ?? 'unknown',
+            'error' => $e->getMessage()
+        ]);
+        throw $e;
+    }
+}
+/**
+ * Update equipment ID across all related tables when project changes.
+ * Uses a transaction-like approach since Supabase REST API doesn't support transactions.
+ */
+public function updateEquipmentId(int $oldEquipmentId, int $newEquipmentId, int $newProjectId, array $equipmentData): ?array
+{
+    Log::info('Updating equipment ID', [
+        'old_id' => $oldEquipmentId,
+        'new_id' => $newEquipmentId,
+        'new_project_id' => $newProjectId
+    ]);
+
+    try {
+        // Step 1: Create new equipment record with new ID
+        $equipmentPayload = array_merge($equipmentData, [
+            'equipment_id' => $newEquipmentId,
+            'project_id' => $newProjectId,
+            'updated_at' => now()->toIso8601String(),
+        ]);
+
+        $createResponse = Http::withHeaders($this->getHeaders())
+            ->post($this->url.'/rest/v1/tbl_equipments', $equipmentPayload);
+
+        $newEquipment = $this->handleResponse($createResponse)[0] ?? null;
+
+        if (!$newEquipment) {
+            throw new \Exception('Failed to create new equipment record');
+        }
+
+        // Step 2: Update locations to point to new equipment_id
+        Http::withHeaders($this->getHeaders())
+            ->patch($this->url.'/rest/v1/tbl_locations?equipment_id=eq.'.$oldEquipmentId, [
+                'equipment_id' => $newEquipmentId,
+            ]);
+
+        // Step 3: Update power consumptions to point to new equipment_id
+        Http::withHeaders($this->getHeaders())
+            ->patch($this->url.'/rest/v1/tbl_powerconsumptions?equipment_id=eq.'.$oldEquipmentId, [
+                'equipment_id' => $newEquipmentId,
+            ]);
+
+        // Step 4: Update utilizations to point to new equipment_id
+        Http::withHeaders($this->getHeaders())
+            ->patch($this->url.'/rest/v1/tbl_utilizations?equipment_id=eq.'.$oldEquipmentId, [
+                'equipment_id' => $newEquipmentId,
+            ]);
+
+        // Step 5: Delete old equipment record
+        Http::withHeaders($this->getHeaders())
+            ->delete($this->url.'/rest/v1/tbl_equipments?equipment_id=eq.'.$oldEquipmentId);
+
+        // Clear caches
+        $this->clearEquipmentCache();
+        Cache::forget('complete_equipment_data');
+
+        Log::info('Equipment ID updated successfully', [
+            'old_id' => $oldEquipmentId,
+            'new_id' => $newEquipmentId
+        ]);
+
+        return $newEquipment;
+    } catch (\Exception $e) {
+        Log::error('Failed to update equipment ID', [
+            'old_id' => $oldEquipmentId,
+            'new_id' => $newEquipmentId,
+            'error' => $e->getMessage()
+        ]);
+        throw $e;
+    }
+}
 }

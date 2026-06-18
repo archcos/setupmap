@@ -1,8 +1,11 @@
 <?php
 
+use App\Http\Controllers\AdminAuthController;
+use App\Http\Controllers\AdminController;
 use App\Http\Controllers\Api\ProvinceController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EquipmentController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\MapController;
 use Illuminate\Support\Facades\Route;
 
@@ -16,4 +19,19 @@ Route::get('/map-data', [MapController::class, 'getMapData'])->name('map.data');
 Route::post('/map/clear-cache', [MapController::class, 'clearCache'])->name('map.clear-cache');
 Route::get('/equipment-map-data', [MapController::class, 'getMapData']);
 
-Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+Route::get('/', [HomeController::class, 'index'])->name('home');
+
+Route::prefix('admin')->group(function () {
+    // Auth routes
+    Route::get('/login', [AdminAuthController::class, 'showLogin'])->name('admin.login');
+    Route::post('/login', [AdminAuthController::class, 'login']);
+    Route::post('/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
+    
+    // Protected routes
+    Route::middleware(['admin.auth'])->group(function () {
+        Route::get('/dashboard', [AdminController::class, 'index'])->name('admin.dashboard');
+        Route::post('/equipment', [AdminController::class, 'store'])->name('admin.equipment.store');
+        Route::put('/equipment/{id}', [AdminController::class, 'update'])->name('admin.equipment.update');
+        Route::get('/logout', [AdminAuthController::class, 'logout'])->name('admin.logout.get');
+    });
+});

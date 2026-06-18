@@ -4,15 +4,15 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 
-class DashboardController extends Controller
+class HomeController extends Controller
 {
     /**
-     * Display the dashboard page
+     * Display the home page
      *
      * @return \Inertia\Response
      */
     public function index()
     {
-        return inertia('Dashboard/Dashboard');
+        return inertia('Home/Index');
     }
 }
