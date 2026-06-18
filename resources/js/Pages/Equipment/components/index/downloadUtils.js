@@ -14,9 +14,9 @@ export const getFilterDescriptions = (filters, dateRangeLabel) => {
     descriptions.push(`Status: ${filters.status === 'active' ? 'Active' : 'Inactive'}`);
   }
   
-  if (dateRangeLabel) {
-    descriptions.push(`Period: ${dateRangeLabel}`);
-  }
+//   if (dateRangeLabel) {
+//     descriptions.push(`Period: ${dateRangeLabel}`);
+//   }
   
   return descriptions;
 };

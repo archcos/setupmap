@@ -33,6 +33,10 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const abortControllerRef = useRef(null);
 
+  // Calculate derived stats
+  const avgHoursPerDay = (stats.avgUtilization / 100) * 8;
+  const peakHours = (stats.peakUtilization / 100) * 8;
+
   // Handle back navigation using browser history
   const handleGoBack = () => {
     if (window.history.length > 1) {
@@ -210,7 +214,7 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
                 stats={stats}
                 dateRangeLabel={dateRangeLabel}
                 loading={loading}
-                includeCharts={true}  // Optional: Include charts in PDF
+                includeCharts={true}
               />
             </div>
           </div>
@@ -228,30 +232,59 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
         )}
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-4 sm:mb-6">
           <div className="bg-white rounded-lg shadow p-3 sm:p-4 border border-gray-200">
             <div className="flex items-center justify-between">
-              <p className="text-xs text-gray-600 font-medium">Average Utilization</p>
+              <p className="text-xs text-gray-600 font-medium">Avg Utilization</p>
               <Activity size={16} className="text-blue-500" />
             </div>
-            <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{stats.avgUtilization.toFixed(1)}%</p>
-            <p className="text-xs text-gray-500">Over {stats.totalDays} days (8h = 100%)</p>
+            <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{stats.avgUtilization.toFixed(2)}%</p>
+            <p className="text-xs text-gray-500">Across {stats.totalDays} days</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-3 sm:p-4 border border-gray-200">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-gray-600 font-medium">Peak Power</p>
-              <Zap size={16} className="text-orange-500" />
-            </div>
-            <p className="text-lg sm:text-xl font-bold text-orange-600 mt-1">{stats.peakPower.toFixed(1)}W</p>
-            <p className="text-xs text-gray-500">Highest recorded</p>
-          </div>
+          
           <div className="bg-white rounded-lg shadow p-3 sm:p-4 border border-gray-200">
             <div className="flex items-center justify-between">
               <p className="text-xs text-gray-600 font-medium">Peak Utilization</p>
               <TrendingUp size={16} className="text-green-500" />
             </div>
-            <p className="text-lg sm:text-xl font-bold text-green-600 mt-1">{stats.peakUtilization.toFixed(1)}%</p>
-            <p className="text-xs text-gray-500">Highest daily average</p>
+            <p className="text-lg sm:text-xl font-bold text-green-600 mt-1">{stats.peakUtilization.toFixed(2)}%</p>
+            <p className="text-xs text-gray-500">Highest recorded</p>
+          </div>
+          
+          <div className="bg-white rounded-lg shadow p-3 sm:p-4 border border-gray-200">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-600 font-medium">Peak Hours</p>
+              <Clock size={16} className="text-red-500" />
+            </div>
+            <p className="text-lg sm:text-xl font-bold text-red-600 mt-1">{peakHours.toFixed(2)}h</p>
+            <p className="text-xs text-gray-500">{stats.peakUtilization.toFixed(2)}% of 8h</p>
+          </div>
+          
+          <div className="bg-white rounded-lg shadow p-3 sm:p-4 border border-gray-200">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-600 font-medium">Avg Hours/Day</p>
+              <Clock size={16} className="text-purple-500" />
+            </div>
+            <p className="text-lg sm:text-xl font-bold text-purple-600 mt-1">{avgHoursPerDay.toFixed(2)}h</p>
+            <p className="text-xs text-gray-500">Of 8h expected per day</p>
+          </div>
+          
+          <div className="bg-white rounded-lg shadow p-3 sm:p-4 border border-gray-200">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-600 font-medium">Avg Power/Day</p>
+              <Zap size={16} className="text-orange-500" />
+            </div>
+            <p className="text-lg sm:text-xl font-bold text-orange-600 mt-1">{stats.avgPowerPerDay.toFixed(2)}W</p>
+            <p className="text-xs text-gray-500">Across {stats.totalDays} days</p>
+          </div>
+          
+          <div className="bg-white rounded-lg shadow p-3 sm:p-4 border border-gray-200">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-600 font-medium">Peak Power</p>
+              <Zap size={16} className="text-orange-500" />
+            </div>
+            <p className="text-lg sm:text-xl font-bold text-orange-600 mt-1">{stats.peakPower.toFixed(2)}W</p>
+            <p className="text-xs text-gray-500">Highest recorded</p>
           </div>
         </div>
 
@@ -379,7 +412,7 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
                       <Activity className="text-green-600" size={20} />
                       <span className="text-gray-700 font-medium">Today's Utilization</span>
                     </div>
-                    <span className="text-2xl font-bold text-green-600">{stats.avgUtilization.toFixed(1)}%</span>
+                    <span className="text-2xl font-bold text-green-600">{stats.avgUtilization.toFixed(2)}%</span>
                   </div>
                 </div>
                 <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-4 rounded-lg border border-purple-200">
@@ -430,21 +463,26 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
             </div>
             <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 border border-gray-200">
               <h2 className="text-lg font-bold text-gray-900 mb-4">Utilization Summary</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <p className="text-sm text-gray-600 font-medium">Average Utilization</p>
-                  <p className="text-2xl font-bold text-blue-600 mt-1">{stats.avgUtilization.toFixed(1)}%</p>
+                  <p className="text-2xl font-bold text-blue-600 mt-1">{stats.avgUtilization.toFixed(2)}%</p>
                   <p className="text-xs text-gray-500">Over {stats.totalDays} days (8h = 100%)</p>
                 </div>
                 <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                   <p className="text-sm text-gray-600 font-medium">Peak Utilization</p>
-                  <p className="text-2xl font-bold text-green-600 mt-1">{stats.peakUtilization.toFixed(1)}%</p>
+                  <p className="text-2xl font-bold text-green-600 mt-1">{stats.peakUtilization.toFixed(2)}%</p>
                   <p className="text-xs text-gray-500">Highest {isSingleDay ? 'hourly' : 'daily'} rate</p>
                 </div>
                 <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                  <p className="text-sm text-gray-600 font-medium">Average Power/Day</p>
-                  <p className="text-2xl font-bold text-purple-600 mt-1">{stats.avgPowerPerDay.toFixed(1)}W</p>
-                  <p className="text-xs text-gray-500">Over {stats.totalDays} days</p>
+                  <p className="text-sm text-gray-600 font-medium">Avg Hours/Day</p>
+                  <p className="text-2xl font-bold text-purple-600 mt-1">{avgHoursPerDay.toFixed(2)}h</p>
+                  <p className="text-xs text-gray-500">Of 8h expected per day</p>
+                </div>
+                <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                  <p className="text-sm text-gray-600 font-medium">Peak Hours</p>
+                  <p className="text-2xl font-bold text-red-600 mt-1">{peakHours.toFixed(2)}h</p>
+                  <p className="text-xs text-gray-500">{stats.peakUtilization.toFixed(2)}% of 8h</p>
                 </div>
               </div>
             </div>
@@ -485,23 +523,28 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
             </div>
             <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 border border-gray-200">
               <h2 className="text-lg font-bold text-gray-900 mb-4">Power Summary</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
                   <p className="text-sm text-gray-600 font-medium">Current Power</p>
                   <p className="text-2xl font-bold text-orange-600 mt-1">
-                    {equipment.is_active ? `${(equipment.power_consumption || 0).toFixed(1)}W` : '0W'}
+                    {equipment.is_active ? `${(equipment.power_consumption || 0).toFixed(2)}W` : '0W'}
                   </p>
                   <p className="text-xs text-gray-500">{equipment.is_active ? 'Active' : 'Inactive'}</p>
                 </div>
                 <div className="bg-red-50 p-4 rounded-lg border border-red-200">
                   <p className="text-sm text-gray-600 font-medium">Peak Power</p>
-                  <p className="text-2xl font-bold text-red-600 mt-1">{stats.peakPower.toFixed(1)}W</p>
+                  <p className="text-2xl font-bold text-red-600 mt-1">{stats.peakPower.toFixed(2)}W</p>
                   <p className="text-xs text-gray-500">Highest recorded</p>
                 </div>
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <p className="text-sm text-gray-600 font-medium">Avg Power/Day</p>
-                  <p className="text-2xl font-bold text-blue-600 mt-1">{stats.avgPowerPerDay.toFixed(1)}W</p>
+                  <p className="text-2xl font-bold text-blue-600 mt-1">{stats.avgPowerPerDay.toFixed(2)}W</p>
                   <p className="text-xs text-gray-500">Over {stats.totalDays} days</p>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                  <p className="text-sm text-gray-600 font-medium">Avg Hours/Day</p>
+                  <p className="text-2xl font-bold text-purple-600 mt-1">{avgHoursPerDay.toFixed(2)}h</p>
+                  <p className="text-xs text-gray-500">Of 8h expected per day</p>
                 </div>
               </div>
             </div>
