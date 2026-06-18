@@ -1,15 +1,15 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Activity, AlertCircle, Calendar, ChevronDown, Clock, Filter, TrendingUp, Zap } from 'lucide-react';
 import { Head, router } from '@inertiajs/react';
-import EquipmentHeader from './components/EquipmentHeader';
-import EquipmentCharts from './components/EquipmentCharts';
-import EquipmentList from './components/EquipmentList';
-import { processGraphData } from './components/equipmentUtils';
-import { getDateRange, getDateLabel } from './components/equipmentUtils';
+import EquipmentHeader from './components/index/EquipmentHeader';
+import EquipmentCharts from './components/index/EquipmentCharts';
+import EquipmentList from './components/index/EquipmentList';
+import { processGraphData } from './components/index/equipmentUtils';
+import { getDateRange, getDateLabel } from './components/index/equipmentUtils';
 
 const ITEMS_PER_PAGE = 10;
 
-export default function EquipmentPage() {
+export default function Index() {
   const [allEquipmentData, setAllEquipmentData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -130,6 +130,12 @@ export default function EquipmentPage() {
       <EquipmentHeader 
         dateRangeLabel={getDateLabel(dateFilter, selectedDate)}
         allEquipmentData={allEquipmentData}
+        filteredData={filteredData}
+        filterStatus={filterStatus}
+        selectedLocation={selectedLocation}
+        dateFilter={dateFilter}
+        selectedDate={selectedDate}
+        loading={loading} // Pass loading state
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
@@ -179,120 +185,119 @@ export default function EquipmentPage() {
 
         {/* Date Range Selector */}
         <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-4 border border-gray-200">
-{/* Date Range Selector - Fixed dropdown section */}
-<div className="flex flex-wrap items-center gap-2">
-  <div className="flex flex-wrap gap-1.5">
-    {['day', 'week', 'month', 'year'].map(f => (
-      <button key={f} onClick={() => { setDateFilter(f); setSelectedDate(new Date()); }}
-        className={`px-3 py-1.5 rounded-lg font-medium text-sm ${dateFilter === f ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-        {f.charAt(0).toUpperCase() + f.slice(1)}
-      </button>
-    ))}
-  </div>
-  <div className="flex items-center gap-1.5 ml-auto">
-    {dateFilter === 'day' && (
-      <div className="relative">
-        <button onClick={() => setShowDropdowns(prev => ({ ...prev, day: !prev.day }))}
-          className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium text-sm flex items-center gap-1">
-          Day {selectedDate.getDate()}<ChevronDown size={12} />
-        </button>
-        {showDropdowns.day && (
-          <div className="absolute right-0 mt-2 bg-white border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto w-36">
-            {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
-              <button key={d} onClick={() => { const nd = new Date(selectedDate); nd.setDate(d); setSelectedDate(nd); setShowDropdowns(prev => ({ ...prev, day: false })); }}
-                className={`w-full text-left px-3 py-2 hover:bg-blue-50 text-sm ${selectedDate.getDate() === d ? 'bg-blue-100 font-semibold' : ''}`}>{d}</button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap gap-1.5">
+              {['day', 'week', 'month', 'year'].map(f => (
+                <button key={f} onClick={() => { setDateFilter(f); setSelectedDate(new Date()); }}
+                  className={`px-3 py-1.5 rounded-lg font-medium text-sm ${dateFilter === f ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                  {f.charAt(0).toUpperCase() + f.slice(1)}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5 ml-auto">
+              {dateFilter === 'day' && (
+                <div className="relative">
+                  <button onClick={() => setShowDropdowns(prev => ({ ...prev, day: !prev.day }))}
+                    className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium text-sm flex items-center gap-1">
+                    Day {selectedDate.getDate()}<ChevronDown size={12} />
+                  </button>
+                  {showDropdowns.day && (
+                    <div className="absolute right-0 mt-2 bg-white border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto w-36">
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                        <button key={d} onClick={() => { const nd = new Date(selectedDate); nd.setDate(d); setSelectedDate(nd); setShowDropdowns(prev => ({ ...prev, day: false })); }}
+                          className={`w-full text-left px-3 py-2 hover:bg-blue-50 text-sm ${selectedDate.getDate() === d ? 'bg-blue-100 font-semibold' : ''}`}>{d}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(dateFilter === 'month') && (
+                <>
+                  <div className="relative">
+                    <button onClick={() => setShowDropdowns(prev => ({ ...prev, month: !prev.month }))}
+                      className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium text-sm flex items-center gap-1">
+                      {new Date(selectedDate).toLocaleString('default', { month: 'short' })}<ChevronDown size={12} />
+                    </button>
+                    {showDropdowns.month && (
+                      <div className="absolute right-0 mt-2 bg-white border rounded-lg shadow-lg z-20">
+                        {Array.from({ length: 12 }, (_, i) => new Date(2024, i).toLocaleString('default', { month: 'short' })).map((m, i) => (
+                          <button key={i} onClick={() => { const nd = new Date(selectedDate); nd.setMonth(i); setSelectedDate(nd); setShowDropdowns(prev => ({ ...prev, month: false })); }}
+                            className={`w-full text-left px-3 py-2 hover:bg-blue-50 text-sm ${selectedDate.getMonth() === i ? 'bg-blue-100 font-semibold' : ''}`}>{m}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <button onClick={() => setShowDropdowns(prev => ({ ...prev, year: !prev.year }))}
+                      className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium text-sm flex items-center gap-1">
+                      {selectedDate.getFullYear()}<ChevronDown size={12} />
+                    </button>
+                    {showDropdowns.year && (
+                      <div className="absolute right-0 mt-2 bg-white border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto w-32">
+                        {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map(y => (
+                          <button key={y} onClick={() => { const nd = new Date(selectedDate); nd.setFullYear(y); setSelectedDate(nd); setShowDropdowns(prev => ({ ...prev, year: false })); }}
+                            className={`w-full text-left px-3 py-2 hover:bg-blue-50 text-sm ${selectedDate.getFullYear() === y ? 'bg-blue-100 font-semibold' : ''}`}>{y}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {dateFilter === 'week' && (
+                <>
+                  <div className="relative">
+                    <button onClick={() => setShowDropdowns(prev => ({ ...prev, week: !prev.week }))}
+                      className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium text-sm flex items-center gap-1">
+                      Week {Math.ceil((selectedDate.getTime() - new Date(selectedDate.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))}<ChevronDown size={12} />
+                    </button>
+                    {showDropdowns.week && (
+                      <div className="absolute right-0 mt-2 bg-white border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto w-36">
+                        {Array.from({ length: 52 }, (_, i) => i + 1).map(w => (
+                          <button key={w} onClick={() => { const nd = new Date(selectedDate.getFullYear(), 0, 1 + (w-1) * 7); nd.setDate(nd.getDate() - nd.getDay() + 1); setSelectedDate(nd); setShowDropdowns(prev => ({ ...prev, week: false })); }}
+                            className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm">Week {w}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <button onClick={() => setShowDropdowns(prev => ({ ...prev, year: !prev.year }))}
+                      className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium text-sm flex items-center gap-1">
+                      {selectedDate.getFullYear()}<ChevronDown size={12} />
+                    </button>
+                    {showDropdowns.year && (
+                      <div className="absolute right-0 mt-2 bg-white border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto w-32">
+                        {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map(y => (
+                          <button key={y} onClick={() => { const nd = new Date(selectedDate); nd.setFullYear(y); setSelectedDate(nd); setShowDropdowns(prev => ({ ...prev, year: false })); }}
+                            className={`w-full text-left px-3 py-2 hover:bg-blue-50 text-sm ${selectedDate.getFullYear() === y ? 'bg-blue-100 font-semibold' : ''}`}>{y}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {dateFilter === 'year' && (
+                <div className="relative">
+                  <button onClick={() => setShowDropdowns(prev => ({ ...prev, year: !prev.year }))}
+                    className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium text-sm flex items-center gap-1">
+                    {selectedDate.getFullYear()}<ChevronDown size={12} />
+                  </button>
+                  {showDropdowns.year && (
+                    <div className="absolute right-0 mt-2 bg-white border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto w-32">
+                      {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map(y => (
+                        <button key={y} onClick={() => { const nd = new Date(selectedDate); nd.setFullYear(y); setSelectedDate(nd); setShowDropdowns(prev => ({ ...prev, year: false })); }}
+                          className={`w-full text-left px-3 py-2 hover:bg-blue-50 text-sm ${selectedDate.getFullYear() === y ? 'bg-blue-100 font-semibold' : ''}`}>{y}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <button onClick={() => setSelectedDate(new Date())} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium text-sm">Today</button>
+            </div>
           </div>
-        )}
-      </div>
-    )}
-
-    {(dateFilter === 'month') && (
-      <>
-        <div className="relative">
-          <button onClick={() => setShowDropdowns(prev => ({ ...prev, month: !prev.month }))}
-            className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium text-sm flex items-center gap-1">
-            {new Date(selectedDate).toLocaleString('default', { month: 'short' })}<ChevronDown size={12} />
-          </button>
-          {showDropdowns.month && (
-            <div className="absolute right-0 mt-2 bg-white border rounded-lg shadow-lg z-20">
-              {Array.from({ length: 12 }, (_, i) => new Date(2024, i).toLocaleString('default', { month: 'short' })).map((m, i) => (
-                <button key={i} onClick={() => { const nd = new Date(selectedDate); nd.setMonth(i); setSelectedDate(nd); setShowDropdowns(prev => ({ ...prev, month: false })); }}
-                  className={`w-full text-left px-3 py-2 hover:bg-blue-50 text-sm ${selectedDate.getMonth() === i ? 'bg-blue-100 font-semibold' : ''}`}>{m}</button>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="relative">
-          <button onClick={() => setShowDropdowns(prev => ({ ...prev, year: !prev.year }))}
-            className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium text-sm flex items-center gap-1">
-            {selectedDate.getFullYear()}<ChevronDown size={12} />
-          </button>
-          {showDropdowns.year && (
-            <div className="absolute right-0 mt-2 bg-white border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto w-32">
-              {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map(y => (
-                <button key={y} onClick={() => { const nd = new Date(selectedDate); nd.setFullYear(y); setSelectedDate(nd); setShowDropdowns(prev => ({ ...prev, year: false })); }}
-                  className={`w-full text-left px-3 py-2 hover:bg-blue-50 text-sm ${selectedDate.getFullYear() === y ? 'bg-blue-100 font-semibold' : ''}`}>{y}</button>
-              ))}
-            </div>
-          )}
-        </div>
-      </>
-    )}
-
-    {dateFilter === 'week' && (
-      <>
-        <div className="relative">
-          <button onClick={() => setShowDropdowns(prev => ({ ...prev, week: !prev.week }))}
-            className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium text-sm flex items-center gap-1">
-            Week {Math.ceil((selectedDate.getTime() - new Date(selectedDate.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))}<ChevronDown size={12} />
-          </button>
-          {showDropdowns.week && (
-            <div className="absolute right-0 mt-2 bg-white border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto w-36">
-              {Array.from({ length: 52 }, (_, i) => i + 1).map(w => (
-                <button key={w} onClick={() => { const nd = new Date(selectedDate.getFullYear(), 0, 1 + (w-1) * 7); nd.setDate(nd.getDate() - nd.getDay() + 1); setSelectedDate(nd); setShowDropdowns(prev => ({ ...prev, week: false })); }}
-                  className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm">Week {w}</button>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="relative">
-          <button onClick={() => setShowDropdowns(prev => ({ ...prev, year: !prev.year }))}
-            className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium text-sm flex items-center gap-1">
-            {selectedDate.getFullYear()}<ChevronDown size={12} />
-          </button>
-          {showDropdowns.year && (
-            <div className="absolute right-0 mt-2 bg-white border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto w-32">
-              {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map(y => (
-                <button key={y} onClick={() => { const nd = new Date(selectedDate); nd.setFullYear(y); setSelectedDate(nd); setShowDropdowns(prev => ({ ...prev, year: false })); }}
-                  className={`w-full text-left px-3 py-2 hover:bg-blue-50 text-sm ${selectedDate.getFullYear() === y ? 'bg-blue-100 font-semibold' : ''}`}>{y}</button>
-              ))}
-            </div>
-          )}
-        </div>
-      </>
-    )}
-
-    {dateFilter === 'year' && (
-      <div className="relative">
-        <button onClick={() => setShowDropdowns(prev => ({ ...prev, year: !prev.year }))}
-          className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium text-sm flex items-center gap-1">
-          {selectedDate.getFullYear()}<ChevronDown size={12} />
-        </button>
-        {showDropdowns.year && (
-          <div className="absolute right-0 mt-2 bg-white border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto w-32">
-            {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map(y => (
-              <button key={y} onClick={() => { const nd = new Date(selectedDate); nd.setFullYear(y); setSelectedDate(nd); setShowDropdowns(prev => ({ ...prev, year: false })); }}
-                className={`w-full text-left px-3 py-2 hover:bg-blue-50 text-sm ${selectedDate.getFullYear() === y ? 'bg-blue-100 font-semibold' : ''}`}>{y}</button>
-            ))}
-          </div>
-        )}
-      </div>
-    )}
-
-    <button onClick={() => setSelectedDate(new Date())} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium text-sm">Today</button>
-  </div>
-</div>
         </div>
 
         {/* Charts */}

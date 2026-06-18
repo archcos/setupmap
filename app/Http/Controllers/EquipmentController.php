@@ -17,9 +17,9 @@ class EquipmentController extends Controller
     /**
      * Equipment dashboard page
      */
-    public function equipmentPage()
+    public function index()
     {
-        return Inertia::render('Equipment/EquipmentPage');
+        return Inertia::render('Equipment/Index');
     }
 
     /**

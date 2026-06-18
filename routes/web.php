@@ -6,7 +6,7 @@ use App\Http\Controllers\EquipmentController;
 use App\Http\Controllers\MapController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/equipment', [EquipmentController::class, 'equipmentPage'])->name('equipment.index');
+Route::get('/equipment', [EquipmentController::class, 'index'])->name('equipment.index');
 Route::get('/equipment-utilization', [EquipmentController::class, 'utilizations'])->name('equipment.utilizations');
 Route::get('/equipment/{equipmentId}/details', [EquipmentController::class, 'detailsPage'])->name('equipment.details');
 Route::get('/equipment/{equipmentId}', [EquipmentController::class, 'show'])->name('equipment.show');

@@ -9,8 +9,8 @@ import {
   Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import ExportDropdown from './components/ExportDropdown';
-import { processHistoryData } from './components/dataProcessor';
-import { formatDateRangeLabel, getStartOfDay, getEndOfDay } from './components/dateUtils';
+import { processHistoryData } from './components/details/dataProcessor';
+import { formatDateRangeLabel, getStartOfDay, getEndOfDay } from './components/details/dateUtils';
 
 export default function EquipmentDetails({ equipment: initialEquipment }) {
   const [activeTab, setActiveTab] = useState('overview');
@@ -210,6 +210,7 @@ export default function EquipmentDetails({ equipment: initialEquipment }) {
                 stats={stats}
                 dateRangeLabel={dateRangeLabel}
                 loading={loading}
+                includeCharts={true}  // Optional: Include charts in PDF
               />
             </div>
           </div>
