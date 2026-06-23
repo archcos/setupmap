@@ -72,7 +72,7 @@ export default function Index() {
       <audio ref={audioRef} src={LogoSong} preload="auto" />
       
       <div className="relative w-full max-w-6xl">
-      <Head title="DOST-NorMin SETUP P3 Portal" />
+        <Head title="DOST-NorMin SETUP P3 Portal" />
         {/* Website Title - Centered at top */}
         <div className="text-center mb-12 lg:mb-16">
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent animate-gradient-x mb-3">
@@ -241,25 +241,6 @@ export default function Index() {
           </div>
         </div>
       </div>
-
-      {/* Custom animations */}
-      <style jsx>{`
-        @keyframes float-slow {
-          0%, 100% { transform: translateY(0px) scale(1); }
-          50% { transform: translateY(-20px) scale(1.05); }
-        }
-        @keyframes float-slower {
-          0%, 100% { transform: translateY(0px) scale(1); }
-          50% { transform: translateY(-15px) scale(1.05); }
-        }
-        @keyframes gradient-x {
-          0%, 100% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-        }
-        .animate-float-slow { animation: float-slow 8s ease-in-out infinite; }
-        .animate-float-slower { animation: float-slower 10s ease-in-out infinite; }
-        .animate-gradient-x { background-size: 200% 200%; animation: gradient-x 4s ease infinite; }
-      `}</style>
     </div>
   );
 }
