@@ -37,7 +37,7 @@ class MapController extends Controller
             }
             Log::info('Extracted locations from equipment data', ['count' => count($locations)]);
 
-            return Inertia::render('Map/MapPage', [
+            return Inertia::render('Map/Index', [
                 'equipments' => $transformedEquipments,
                 'locations' => $locations,
                 'error' => null,
@@ -48,7 +48,7 @@ class MapController extends Controller
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            return Inertia::render('Map/MapPage', [
+            return Inertia::render('Map/Index', [
                 'equipments' => [],
                 'locations' => [],
                 'error' => 'Failed to load equipment and location data. Please try again later.',

@@ -1,4 +1,5 @@
-import { Search, LayoutGrid, List, ChevronLeft, ChevronRight, ArrowRight, Zap, Clock, MapPin } from 'lucide-react';
+import { useState } from 'react';
+import { Search, LayoutGrid, List, ChevronLeft, ChevronRight, ArrowRight, Zap, Clock, MapPin, Loader2 } from 'lucide-react';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -7,6 +8,14 @@ export default function EquipmentList({
   filterStatus, setFilterStatus, searchTerm, setSearchTerm,
   allEquipmentData, currentPage, totalPages, onPageChange, onViewDetails
 }) {
+  const [loadingId, setLoadingId] = useState(null);
+
+  const handleViewDetails = (equipmentId) => {
+    if (loadingId) return; // Prevent multiple clicks
+    setLoadingId(equipmentId);
+    onViewDetails(equipmentId);
+  };
+
   return (
     <div>
       {/* Filters */}
@@ -44,14 +53,30 @@ export default function EquipmentList({
       {viewMode === 'grid' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
           {paginatedData.map(eq => (
-            <div key={eq.equipment_id} className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border border-gray-100 overflow-hidden">
-              <div className={`p-3 sm:p-4 text-white ${eq.is_active ? 'bg-gradient-to-r from-blue-500 to-blue-600' : 'bg-gradient-to-r from-gray-500 to-gray-600'}`}>
+            <div key={eq.equipment_id} className={`bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 overflow-hidden ${
+              loadingId === eq.equipment_id ? 'ring-2 ring-blue-300 shadow-xl' : ''
+            } ${loadingId && loadingId !== eq.equipment_id ? 'opacity-50' : ''}`}>
+              <div className={`p-3 sm:p-4 text-white transition-all duration-300 ${
+                eq.is_active 
+                  ? loadingId === eq.equipment_id 
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-700' 
+                    : 'bg-gradient-to-r from-blue-500 to-blue-600'
+                  : loadingId === eq.equipment_id
+                    ? 'bg-gradient-to-r from-gray-600 to-gray-700'
+                    : 'bg-gradient-to-r from-gray-500 to-gray-600'
+              }`}>
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="text-base sm:text-lg font-bold">{eq.equipment_name}</h3>
                     <p className="text-white/80 text-xs">ID: {eq.equipment_id}</p>
                   </div>
-                  <div className={`w-2 h-2 rounded-full ${eq.is_active ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`}></div>
+                  <div className={`w-2 h-2 rounded-full ${
+                    loadingId === eq.equipment_id 
+                      ? 'bg-yellow-400 animate-pulse' 
+                      : eq.is_active 
+                        ? 'bg-green-400 animate-pulse' 
+                        : 'bg-gray-400'
+                  }`}></div>
                 </div>
               </div>
               <div className="p-3 sm:p-4 space-y-2.5">
@@ -65,21 +90,44 @@ export default function EquipmentList({
                     <span className="text-xs font-bold text-blue-600">{(eq.utilization_percentage_8h || 0).toFixed(1)}%</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-1.5">
-                    <div className="bg-blue-600 h-1.5 rounded-full" style={{ width: `${Math.min(eq.utilization_percentage_8h || 0, 100)}%` }}></div>
+                    <div className="bg-blue-600 h-1.5 rounded-full transition-all duration-300" style={{ width: `${Math.min(eq.utilization_percentage_8h || 0, 100)}%` }}></div>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-orange-50 p-2 rounded-lg border border-orange-100">
+                  <div className={`bg-orange-50 p-2 rounded-lg border border-orange-100 transition-all duration-300 ${
+                    loadingId === eq.equipment_id ? 'bg-orange-100 border-orange-200' : ''
+                  }`}>
                     <div className="flex items-center gap-1"><Zap size={11} className="text-orange-600" /><p className="text-xs text-gray-600">Power</p></div>
                     <p className="text-sm font-bold text-orange-600">{eq.is_active ? (eq.power_consumption || 0).toFixed(1) : '0'}W</p>
                   </div>
-                  <div className="bg-purple-50 p-2 rounded-lg border border-purple-100">
+                  <div className={`bg-purple-50 p-2 rounded-lg border border-purple-100 transition-all duration-300 ${
+                    loadingId === eq.equipment_id ? 'bg-purple-100 border-purple-200' : ''
+                  }`}>
                     <div className="flex items-center gap-1"><Clock size={11} className="text-purple-600" /><p className="text-xs text-gray-600">Avg Power</p></div>
                     <p className="text-sm font-bold text-purple-600">{(eq.avg_power_8h || 0).toFixed(1)}W</p>
                   </div>
                 </div>
-                <button onClick={() => onViewDetails(eq.equipment_id)} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg flex items-center justify-center gap-2 text-sm">
-                  View Details <ArrowRight size={14} />
+                <button 
+                  onClick={() => handleViewDetails(eq.equipment_id)} 
+                  disabled={loadingId !== null}
+                  className={`w-full font-semibold py-2 rounded-lg flex items-center justify-center gap-2 text-sm transition-all duration-300 ${
+                    loadingId === eq.equipment_id
+                      ? 'bg-blue-700 text-white cursor-wait shadow-lg transform scale-[0.98]'
+                      : loadingId
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-md active:scale-[0.98]'
+                  }`}
+                >
+                  {loadingId === eq.equipment_id ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      View Details <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" />
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -105,14 +153,64 @@ export default function EquipmentList({
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {paginatedData.map(eq => (
-                  <tr key={eq.equipment_id} className="hover:bg-gray-50">
-                    <td className="px-3 py-2.5"><p className="font-medium text-sm">{eq.equipment_name}</p><p className="text-xs text-gray-500">ID: {eq.equipment_id}</p></td>
+                  <tr key={eq.equipment_id} className={`transition-all duration-300 ${
+                    loadingId === eq.equipment_id 
+                      ? 'bg-blue-50 ring-1 ring-blue-200' 
+                      : 'hover:bg-gray-50'
+                  } ${loadingId && loadingId !== eq.equipment_id ? 'opacity-50' : ''}`}>
+                    <td className="px-3 py-2.5">
+                      <p className="font-medium text-sm">{eq.equipment_name}</p>
+                      <p className="text-xs text-gray-500">ID: {eq.equipment_id}</p>
+                    </td>
                     <td className="px-3 py-2.5 text-sm text-gray-600 hidden sm:table-cell">{eq.owner}</td>
                     <td className="px-3 py-2.5 text-sm text-gray-600 hidden md:table-cell">{eq.expected_location}</td>
-                    <td className="px-3 py-2.5"><span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${eq.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{eq.is_active ? 'Active' : 'Inactive'}</span></td>
-                    <td className="px-3 py-2.5"><p className="text-sm font-semibold text-blue-600">{(eq.utilization_percentage_8h || 0).toFixed(1)}%</p><p className="text-xs text-gray-500">{(eq.utilization_hours_8h || 0).toFixed(1)}h / 8h</p></td>
-                    <td className="px-3 py-2.5 hidden lg:table-cell"><p className="text-sm font-semibold text-orange-600">{eq.is_active ? (eq.power_consumption || 0).toFixed(1) : '0'}W</p></td>
-                    <td className="px-3 py-2.5"><button onClick={() => onViewDetails(eq.equipment_id)} className="text-blue-600 hover:text-blue-800 font-medium text-sm">Details</button></td>
+                    <td className="px-3 py-2.5">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-all duration-300 ${
+                        loadingId === eq.equipment_id
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : eq.is_active 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {loadingId === eq.equipment_id ? (
+                          <>
+                            <Loader2 size={10} className="animate-spin" />
+                            Loading
+                          </>
+                        ) : (
+                          eq.is_active ? 'Active' : 'Inactive'
+                        )}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <p className="text-sm font-semibold text-blue-600">{(eq.utilization_percentage_8h || 0).toFixed(1)}%</p>
+                      <p className="text-xs text-gray-500">{(eq.utilization_hours_8h || 0).toFixed(1)}h / 8h</p>
+                    </td>
+                    <td className="px-3 py-2.5 hidden lg:table-cell">
+                      <p className="text-sm font-semibold text-orange-600">{eq.is_active ? (eq.power_consumption || 0).toFixed(1) : '0'}W</p>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <button 
+                        onClick={() => handleViewDetails(eq.equipment_id)} 
+                        disabled={loadingId !== null}
+                        className={`font-medium text-sm transition-all duration-300 flex items-center gap-1 ${
+                          loadingId === eq.equipment_id
+                            ? 'text-blue-700 cursor-wait'
+                            : loadingId
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-blue-600 hover:text-blue-800'
+                        }`}
+                      >
+                        {loadingId === eq.equipment_id ? (
+                          <>
+                            <Loader2 size={12} className="animate-spin" />
+                            Loading...
+                          </>
+                        ) : (
+                          'Details'
+                        )}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

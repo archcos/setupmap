@@ -1,4 +1,4 @@
-import { MapPin, Zap, ArrowRight, Sparkles, Stars } from 'lucide-react';
+import { MapPin, Zap, ArrowRight, Sparkles, Stars, Loader2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import SetupLogo from '@/../../resources/assets/SETUP_logo.webp';
 import Logo from '@/../../resources/assets/logo.webp';
@@ -10,6 +10,7 @@ export default function Index() {
   const [logoHovered, setLogoHovered] = useState(false);
   const [setupLogoHovered, setSetupLogoHovered] = useState(false);
   const [activeCard, setActiveCard] = useState(null);
+  const [loadingButton, setLoadingButton] = useState(null); // 'equipment' or 'location'
 
   const playLogoSound = () => {
     if (audioRef.current) {
@@ -51,13 +52,25 @@ export default function Index() {
   };
 
   const handleEquipmentClick = () => {
+    if (loadingButton) return; // Prevent double clicks
+    setLoadingButton('equipment');
     playEquipmentSound();
-    window.location.href = '/equipment';
+    
+    // Small delay to show the loading animation
+    setTimeout(() => {
+      window.location.href = '/equipment';
+    }, 600);
   };
 
   const handleMapClick = () => {
+    if (loadingButton) return; // Prevent double clicks
+    setLoadingButton('location');
     playLocationSound();
-    window.location.href = '/map';
+    
+    // Small delay to show the loading animation
+    setTimeout(() => {
+      window.location.href = '/map';
+    }, 600);
   };
 
   return (
@@ -165,21 +178,32 @@ export default function Index() {
             <button
               onClick={handleEquipmentClick}
               onMouseEnter={() => {
-                setActiveCard('equipment');
-                playEquipmentSound();
+                if (!loadingButton) {
+                  setActiveCard('equipment');
+                  playEquipmentSound();
+                }
               }}
               onMouseLeave={() => setActiveCard(null)}
+              disabled={loadingButton !== null}
               className={`group w-full relative rounded-2xl transition-all duration-300 hover:-translate-y-1 active:scale-[0.99] px-6 py-5 sm:px-8 sm:py-6 border-2 overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-4 ${
-                activeCard === 'equipment' 
-                  ? 'border-blue-300 shadow-xl bg-white' 
-                  : 'border-slate-200 shadow-lg bg-white hover:border-blue-200 hover:shadow-xl'
-              }`}
+                loadingButton === 'equipment'
+                  ? 'border-blue-300 shadow-xl bg-blue-50 cursor-wait'
+                  : activeCard === 'equipment' 
+                    ? 'border-blue-300 shadow-xl bg-white' 
+                    : 'border-slate-200 shadow-lg bg-white hover:border-blue-200 hover:shadow-xl'
+              } ${loadingButton !== null && loadingButton !== 'equipment' ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <div className="relative flex items-center gap-5">
                 {/* Icon */}
                 <div className="flex-shrink-0">
-                  <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-3 sm:p-3.5 rounded-xl shadow-md transition-all duration-300 group-hover:scale-105 group-hover:shadow-blue-500/25">
-                    <Zap className="w-6 h-6 sm:w-7 sm:h-7 text-white" strokeWidth={1.5} />
+                  <div className={`bg-gradient-to-br from-blue-500 to-blue-600 p-3 sm:p-3.5 rounded-xl shadow-md transition-all duration-300 ${
+                    loadingButton === 'equipment' ? 'animate-pulse scale-105 shadow-blue-500/25' : 'group-hover:scale-105 group-hover:shadow-blue-500/25'
+                  }`}>
+                    {loadingButton === 'equipment' ? (
+                      <Loader2 className="w-6 h-6 sm:w-7 sm:h-7 text-white animate-spin" />
+                    ) : (
+                      <Zap className="w-6 h-6 sm:w-7 sm:h-7 text-white" strokeWidth={1.5} />
+                    )}
                   </div>
                 </div>
                 
@@ -189,36 +213,62 @@ export default function Index() {
                     Equipment Manager
                   </h2>
                   <p className="text-sm sm:text-base text-slate-500 group-hover:text-slate-700 transition-colors duration-300">
-                    Manage and monitor equipment inventory
+                    {loadingButton === 'equipment' ? 'Opening...' : 'Manage and monitor equipment inventory'}
                   </p>
                 </div>
 
-                {/* Arrow */}
-                <div className="flex-shrink-0 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
-                  <ArrowRight className="w-5 h-5 text-blue-600" />
+                {/* Arrow or Spinner */}
+                <div className={`flex-shrink-0 transition-all duration-300 ${
+                  loadingButton === 'equipment' 
+                    ? 'opacity-100 translate-x-0' 
+                    : 'opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0'
+                }`}>
+                  {loadingButton === 'equipment' ? (
+                    <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                  ) : (
+                    <ArrowRight className="w-5 h-5 text-blue-600" />
+                  )}
                 </div>
               </div>
+              
+              {/* Loading progress bar */}
+              {loadingButton === 'equipment' && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-100">
+                  <div className="h-full bg-gradient-to-r from-blue-500 to-blue-600 animate-loading-bar" />
+                </div>
+              )}
             </button>
 
             {/* Location Tracking Card */}
             <button
               onClick={handleMapClick}
               onMouseEnter={() => {
-                setActiveCard('location');
-                playLocationSound();
+                if (!loadingButton) {
+                  setActiveCard('location');
+                  playLocationSound();
+                }
               }}
               onMouseLeave={() => setActiveCard(null)}
+              disabled={loadingButton !== null}
               className={`group w-full relative rounded-2xl transition-all duration-300 hover:-translate-y-1 active:scale-[0.99] px-6 py-5 sm:px-8 sm:py-6 border-2 overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-4 ${
-                activeCard === 'location' 
-                  ? 'border-emerald-300 shadow-xl bg-white' 
-                  : 'border-slate-200 shadow-lg bg-white hover:border-emerald-200 hover:shadow-xl'
-              }`}
+                loadingButton === 'location'
+                  ? 'border-emerald-300 shadow-xl bg-emerald-50 cursor-wait'
+                  : activeCard === 'location' 
+                    ? 'border-emerald-300 shadow-xl bg-white' 
+                    : 'border-slate-200 shadow-lg bg-white hover:border-emerald-200 hover:shadow-xl'
+              } ${loadingButton !== null && loadingButton !== 'location' ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <div className="relative flex items-center gap-5">
                 {/* Icon */}
                 <div className="flex-shrink-0">
-                  <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 p-3 sm:p-3.5 rounded-xl shadow-md transition-all duration-300 group-hover:scale-105 group-hover:shadow-emerald-500/25">
-                    <MapPin className="w-6 h-6 sm:w-7 sm:h-7 text-white" strokeWidth={1.5} />
+                  <div className={`bg-gradient-to-br from-emerald-500 to-emerald-600 p-3 sm:p-3.5 rounded-xl shadow-md transition-all duration-300 ${
+                    loadingButton === 'location' ? 'animate-pulse scale-105 shadow-emerald-500/25' : 'group-hover:scale-105 group-hover:shadow-emerald-500/25'
+                  }`}>
+                    {loadingButton === 'location' ? (
+                      <Loader2 className="w-6 h-6 sm:w-7 sm:h-7 text-white animate-spin" />
+                    ) : (
+                      <MapPin className="w-6 h-6 sm:w-7 sm:h-7 text-white" strokeWidth={1.5} />
+                    )}
                   </div>
                 </div>
                 
@@ -228,19 +278,46 @@ export default function Index() {
                     Equipment Tracker
                   </h2>
                   <p className="text-sm sm:text-base text-slate-500 group-hover:text-slate-700 transition-colors duration-300">
-                    Track equipment location on interactive map
+                    {loadingButton === 'location' ? 'Opening...' : 'Track equipment location on interactive map'}
                   </p>
                 </div>
 
-                {/* Arrow */}
-                <div className="flex-shrink-0 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
-                  <ArrowRight className="w-5 h-5 text-emerald-600" />
+                {/* Arrow or Spinner */}
+                <div className={`flex-shrink-0 transition-all duration-300 ${
+                  loadingButton === 'location' 
+                    ? 'opacity-100 translate-x-0' 
+                    : 'opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0'
+                }`}>
+                  {loadingButton === 'location' ? (
+                    <Loader2 className="w-5 h-5 text-emerald-600 animate-spin" />
+                  ) : (
+                    <ArrowRight className="w-5 h-5 text-emerald-600" />
+                  )}
                 </div>
               </div>
+              
+              {/* Loading progress bar */}
+              {loadingButton === 'location' && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-100">
+                  <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 animate-loading-bar" />
+                </div>
+              )}
             </button>
           </div>
         </div>
       </div>
+
+      {/* Add custom keyframes for loading bar animation */}
+      <style>{`
+        @keyframes loading-bar {
+          0% { width: 0%; }
+          50% { width: 70%; }
+          100% { width: 100%; }
+        }
+        .animate-loading-bar {
+          animation: loading-bar 0.6s ease-in-out forwards;
+        }
+      `}</style>
     </div>
   );
 }

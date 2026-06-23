@@ -5,7 +5,7 @@ import { Sidebar } from './components/Sidebar';
 import { MindanaoMap } from './components/MindanaoMap';
 import { provinceMapping } from './constants/mapConstants';
 
-export default function MapPage({ 
+export default function Index({ 
     equipments: initialEquipments = [], 
     locations: initialLocations = [], 
     error: initialError = null 

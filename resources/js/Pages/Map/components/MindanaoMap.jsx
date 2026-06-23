@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, ScaleControl, ZoomControl, Polyline, Tooltip, useMap } from 'react-leaflet';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
-import { Link } from '@inertiajs/react';
+import { router } from '@inertiajs/react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -19,6 +19,15 @@ const tooltipStyles = `
   
   .equipment-utilization-tooltip.leaflet-tooltip::before {
     display: none !important;
+  }
+
+  /* Prevent popup from closing when clicking buttons inside */
+  .leaflet-popup-content button {
+    pointer-events: auto !important;
+  }
+  
+  .leaflet-popup-content-wrapper {
+    pointer-events: auto !important;
   }
 `;
 
@@ -182,74 +191,21 @@ function MapControls({ terrain, onTerrainChange, filter, onFilterChange, counts 
   );
 }
 
-// Main MindanaoMap Component
-export function MindanaoMap({ 
-  selectedLocation = null, 
-  terrain = 'street', 
-  onTerrainChange = () => {}, 
-  locations = [],
-  equipments = [],
-  currentDateTime = new Date()
-}) {
-  const [showHistory, setShowHistory] = useState({});
-  const [equipmentFilter, setEquipmentFilter] = useState('all');
-  const currentTerrain = terrainTypes[terrain];
-  const mapRef = useRef(null);
-
-  const todayDateString = currentDateTime.toDateString();
+// Equipment Popup Content Component (to keep popup open)
+function EquipmentPopupContent({ equipment, onViewDetails, onToggleHistory, loadingEquipmentId }) {
+  const todayDateString = new Date().toDateString();
   
-  const filteredEquipments = equipments.filter(eq => {
-    const hasLocations = eq.locations && eq.locations.length > 0;
-    if (!hasLocations) {
-      return equipmentFilter === 'all' || equipmentFilter === 'inactive';
-    }
-    
-    const latestLocation = eq.locations[eq.locations.length - 1];
-    const isActiveToday = latestLocation?.created_at && 
-      new Date(latestLocation.created_at).toDateString() === todayDateString;
-    
-    switch (equipmentFilter) {
-      case 'active':
-        return isActiveToday;
-      case 'inactive':
-        return !isActiveToday;
-      case 'all':
-      default:
-        return true;
-    }
-  });
-
-  const counts = {
-    all: equipments.length,
-    active: equipments.filter(eq => {
-      if (!eq.locations || eq.locations.length === 0) return false;
-      const latestLocation = eq.locations[eq.locations.length - 1];
-      return latestLocation?.created_at && 
-        new Date(latestLocation.created_at).toDateString() === todayDateString;
-    }).length,
-    inactive: equipments.filter(eq => {
-      if (!eq.locations || eq.locations.length === 0) return true;
-      const latestLocation = eq.locations[eq.locations.length - 1];
-      return !latestLocation?.created_at || 
-        new Date(latestLocation.created_at).toDateString() !== todayDateString;
-    }).length
-  };
-
-  // Get today's power consumption for equipment
   const getTodayPowerConsumption = (equipment) => {
     if (!equipment.power_consumptions || !Array.isArray(equipment.power_consumptions)) {
       return 0;
     }
     
-    // Filter power consumptions for today only
     const todayPowerConsumptions = equipment.power_consumptions.filter(record => {
       if (!record.created_at) return false;
       return new Date(record.created_at).toDateString() === todayDateString;
     });
     
-    // Return the latest power consumption for today
     if (todayPowerConsumptions.length > 0) {
-      // Sort by created_at descending to get latest
       todayPowerConsumptions.sort((a, b) => {
         return new Date(b.created_at) - new Date(a.created_at);
       });
@@ -257,32 +213,6 @@ export function MindanaoMap({
     }
     
     return 0;
-  };
-
-  const createMapPinIcon = (avgUtilization, isActiveToday) => {
-    const utilizationPercent = Math.min(Math.round(avgUtilization), 100);
-    
-    let color;
-    if (!isActiveToday) {
-      color = '#9ca3af';
-    } else {
-      color = utilizationPercent >= 80 ? '#10b981' : utilizationPercent >= 50 ? '#f59e0b' : '#ef4444';
-    }
-    
-    const borderColor = isActiveToday ? 'white' : '#d1d5db';
-    const opacity = isActiveToday ? '1' : '0.6';
-    
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="42" viewBox="0 0 32 42" opacity="${opacity}">
-      <path d="M16 1C7 1 0 8 0 17c0 7 16 24 16 24s16-17 16-24c0-9-7-16-16-16z" fill="${color}" stroke="${borderColor}" stroke-width="1.5"/>
-      <circle cx="16" cy="16" r="5" fill="white"/>
-    </svg>`;
-    
-    return L.icon({
-      iconUrl: `data:image/svg+xml;base64,${btoa(svg)}`,
-      iconSize: [32, 42],
-      iconAnchor: [16, 42],
-      popupAnchor: [0, -42]
-    });
   };
 
   const formatUTCTime = (timestamp) => {
@@ -342,6 +272,267 @@ export function MindanaoMap({
     if (weekData.length === 0) return 0;
     const sum = weekData.reduce((acc, day) => acc + day.utilization, 0);
     return Math.round(sum / weekData.length);
+  };
+
+  const isActiveToday = (equipment) => {
+    if (!equipment.locations || equipment.locations.length === 0) return false;
+    const latestLocation = equipment.locations[equipment.locations.length - 1];
+    return latestLocation?.created_at && 
+      new Date(latestLocation.created_at).toDateString() === todayDateString;
+  };
+
+  const latestLocation = equipment.locations && equipment.locations.length > 0 
+    ? equipment.locations[equipment.locations.length - 1] 
+    : null;
+
+  const weeklyAverage = calculateWeeklyAverage(equipment);
+  const weekData = generateWeekData(equipment);
+  const active = isActiveToday(equipment);
+  const todayPower = getTodayPowerConsumption(equipment);
+  const isLoadingDetails = loadingEquipmentId === equipment.equipment_id;
+
+  return (
+    <div className="text-xs space-y-2 w-64">
+      <div>
+        <div className="font-semibold text-gray-900">{equipment.equipment_name || 'Unknown'}</div>
+        <div className="text-gray-600">Owner: {equipment.owner || 'N/A'}</div>
+        <div className="text-gray-600">Location: {equipment.expected_location || 'N/A'}</div>
+        <div className="mt-1">
+          {active ? (
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+              Active Today
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+              Inactive
+            </span>
+          )}
+        </div>
+      </div>
+      
+      {latestLocation && (
+        <div className="border-t border-gray-200 pt-2">
+          <div className="text-gray-600">Lat: {latestLocation.latitude}</div>
+          <div className="text-gray-600">Lon: {latestLocation.longitude}</div>
+          {latestLocation.created_at && (
+            <div className="text-gray-500 mt-1">
+              Last Update: {formatUTCTime(latestLocation.created_at)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Today's Power Consumption */}
+      <div className="border-t border-gray-200 pt-2">
+        <div className="flex items-center gap-1 mb-1">
+          <span className="text-orange-600">⚡</span>
+          <span className="font-semibold text-gray-700">Today's Power</span>
+        </div>
+        {todayPower > 0 ? (
+          <div>
+            <div className="text-sm font-bold text-orange-600">
+              {todayPower.toFixed(2)}W
+            </div>
+            <div className="text-xs text-gray-500 mt-0.5">
+              Latest reading for today
+            </div>
+          </div>
+        ) : (
+          <div className="text-xs text-gray-500">
+            No power data for today
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-gray-200 pt-2">
+        <div className="font-semibold text-gray-700 mb-2">Weekly Avg Utilization</div>
+        <div className="flex items-center gap-2">
+          <div className="text-lg font-bold text-blue-600">{weeklyAverage}%</div>
+          <div className="flex-1 bg-gray-200 rounded-full h-2">
+            <div
+              className="bg-blue-600 h-2 rounded-full"
+              style={{ width: `${Math.min(weeklyAverage, 100)}%` }}
+            ></div>
+          </div>
+        </div>
+      </div>
+
+      {weekData.length > 0 && (
+        <div className="border-t border-gray-200 pt-2">
+          <div className="font-semibold text-gray-700 mb-2">7-Day Trend</div>
+          <ResponsiveContainer width="100%" height={100}>
+            <LineChart data={weekData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="dateShort" tick={{ fontSize: 9 }} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 9 }} />
+              <ChartTooltip 
+                formatter={(value) => `${value}%`}
+                contentStyle={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '4px', fontSize: '11px' }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="utilization" 
+                stroke="#3b82f6" 
+                dot={{ fill: '#3b82f6', r: 2 }}
+                strokeWidth={1.5}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <div className="border-t border-gray-200 pt-2 space-y-2">
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onToggleHistory(equipment.equipment_id);
+          }}
+          className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-2 rounded flex items-center justify-center gap-1 transition-colors text-xs"
+        >
+          <span>🕐</span>
+          Show Location History
+        </button>
+
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onViewDetails(equipment.equipment_id);
+          }}
+          disabled={loadingEquipmentId !== null}
+          className={`w-full py-2 px-2 rounded flex items-center justify-center gap-1 font-medium transition-all duration-300 text-xs ${
+            isLoadingDetails
+              ? 'bg-blue-700 text-white cursor-wait shadow-lg scale-[0.98]'
+              : loadingEquipmentId
+                ? 'bg-gray-400 text-gray-300 cursor-not-allowed'
+                : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white hover:shadow-md active:scale-[0.98]'
+          }`}
+        >
+          {isLoadingDetails ? (
+            <>
+              <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Loading...
+            </>
+          ) : (
+            <>
+              <span>View Details</span>
+              <span>→</span>
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Main MindanaoMap Component
+export function MindanaoMap({ 
+  selectedLocation = null, 
+  terrain = 'street', 
+  onTerrainChange = () => {}, 
+  locations = [],
+  equipments = [],
+  currentDateTime = new Date()
+}) {
+  const [showHistory, setShowHistory] = useState({});
+  const [equipmentFilter, setEquipmentFilter] = useState('all');
+  const [loadingEquipmentId, setLoadingEquipmentId] = useState(null);
+  const [openPopupId, setOpenPopupId] = useState(null);
+  const currentTerrain = terrainTypes[terrain];
+  const mapRef = useRef(null);
+
+  const todayDateString = currentDateTime.toDateString();
+  
+  const filteredEquipments = equipments.filter(eq => {
+    const hasLocations = eq.locations && eq.locations.length > 0;
+    if (!hasLocations) {
+      return equipmentFilter === 'all' || equipmentFilter === 'inactive';
+    }
+    
+    const latestLocation = eq.locations[eq.locations.length - 1];
+    const isActiveToday = latestLocation?.created_at && 
+      new Date(latestLocation.created_at).toDateString() === todayDateString;
+    
+    switch (equipmentFilter) {
+      case 'active':
+        return isActiveToday;
+      case 'inactive':
+        return !isActiveToday;
+      case 'all':
+      default:
+        return true;
+    }
+  });
+
+  const counts = {
+    all: equipments.length,
+    active: equipments.filter(eq => {
+      if (!eq.locations || eq.locations.length === 0) return false;
+      const latestLocation = eq.locations[eq.locations.length - 1];
+      return latestLocation?.created_at && 
+        new Date(latestLocation.created_at).toDateString() === todayDateString;
+    }).length,
+    inactive: equipments.filter(eq => {
+      if (!eq.locations || eq.locations.length === 0) return true;
+      const latestLocation = eq.locations[eq.locations.length - 1];
+      return !latestLocation?.created_at || 
+        new Date(latestLocation.created_at).toDateString() !== todayDateString;
+    }).length
+  };
+
+  // Handle View Details click with loading animation
+  const handleViewDetails = (equipmentId) => {
+    if (loadingEquipmentId) return; // Prevent multiple clicks
+    setLoadingEquipmentId(equipmentId);
+    setOpenPopupId(equipmentId); // Keep the popup open
+    
+    // Small delay to show the loading animation
+    setTimeout(() => {
+      router.visit(`/equipment/details/${equipmentId}`);
+    }, 600);
+  };
+
+  const handleToggleHistory = (equipmentId) => {
+    setShowHistory(prev => ({
+      ...prev,
+      [equipmentId]: !prev[equipmentId]
+    }));
+  };
+
+  const createMapPinIcon = (avgUtilization, isActiveToday) => {
+    const utilizationPercent = Math.min(Math.round(avgUtilization), 100);
+    
+    let color;
+    if (!isActiveToday) {
+      color = '#9ca3af';
+    } else {
+      color = utilizationPercent >= 80 ? '#10b981' : utilizationPercent >= 50 ? '#f59e0b' : '#ef4444';
+    }
+    
+    const borderColor = isActiveToday ? 'white' : '#d1d5db';
+    const opacity = isActiveToday ? '1' : '0.6';
+    
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="42" viewBox="0 0 32 42" opacity="${opacity}">
+      <path d="M16 1C7 1 0 8 0 17c0 7 16 24 16 24s16-17 16-24c0-9-7-16-16-16z" fill="${color}" stroke="${borderColor}" stroke-width="1.5"/>
+      <circle cx="16" cy="16" r="5" fill="white"/>
+    </svg>`;
+    
+    return L.icon({
+      iconUrl: `data:image/svg+xml;base64,${btoa(svg)}`,
+      iconSize: [32, 42],
+      iconAnchor: [16, 42],
+      popupAnchor: [0, -42]
+    });
+  };
+
+  const calculateWeeklyAverage = (equipment) => {
+    // Simplified calculation
+    return equipment.utilization_percentage_8h || 0;
   };
 
   const isActiveToday = (equipment) => {
@@ -433,10 +624,8 @@ export function MindanaoMap({
           ]);
 
           const weeklyAverage = calculateWeeklyAverage(equipment);
-          const weekData = generateWeekData(equipment);
           const active = isActiveToday(equipment);
           const mapIcon = createMapPinIcon(weeklyAverage, active);
-          const todayPower = getTodayPowerConsumption(equipment);
           
           return (
             <div key={`location-${equipment.equipment_id || Math.random()}`}>
@@ -468,9 +657,6 @@ export function MindanaoMap({
                       <div className="font-semibold text-blue-600">Location #{last10Locations.length - idx}</div>
                       <div className="text-gray-600">Lat: {loc.latitude}</div>
                       <div className="text-gray-600">Lon: {loc.longitude}</div>
-                      <div className="text-gray-500 mt-1">
-                        {formatUTCTime(loc.created_at)}
-                      </div>
                     </div>
                   </Popup>
                 </Marker>
@@ -480,6 +666,14 @@ export function MindanaoMap({
               <Marker
                 position={[parseFloat(latestLocation.latitude), parseFloat(latestLocation.longitude)]}
                 icon={mapIcon}
+                eventHandlers={{
+                  popupopen: () => setOpenPopupId(equipment.equipment_id),
+                  popupclose: () => {
+                    if (loadingEquipmentId !== equipment.equipment_id) {
+                      setOpenPopupId(null);
+                    }
+                  }
+                }}
               >
                 <Tooltip 
                   direction="top" 
@@ -502,116 +696,17 @@ export function MindanaoMap({
                   </div>
                 </Tooltip>
 
-                <Popup>
-                  <div className="text-xs space-y-2 w-64">
-                    <div>
-                      <div className="font-semibold text-gray-900">{equipment.equipment_name || 'Unknown'}</div>
-                      <div className="text-gray-600">Owner: {equipment.owner || 'N/A'}</div>
-                      <div className="text-gray-600">Location: {equipment.expected_location || 'N/A'}</div>
-                      <div className="mt-1">
-                        {active ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                            Active Today
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                            Inactive
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="border-t border-gray-200 pt-2">
-                      <div className="text-gray-600">Lat: {latestLocation.latitude}</div>
-                      <div className="text-gray-600">Lon: {latestLocation.longitude}</div>
-                      {latestLocation.created_at && (
-                        <div className="text-gray-500 mt-1">
-                          Last Update: {formatUTCTime(latestLocation.created_at)}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Today's Power Consumption */}
-                    <div className="border-t border-gray-200 pt-2">
-                      <div className="flex items-center gap-1 mb-1">
-                        <span className="text-orange-600">⚡</span>
-                        <span className="font-semibold text-gray-700">Today's Power</span>
-                      </div>
-                      {todayPower > 0 ? (
-                        <div>
-                          <div className="text-sm font-bold text-orange-600">
-                            {todayPower.toFixed(2)}W
-                          </div>
-                          <div className="text-xs text-gray-500 mt-0.5">
-                            Latest reading for today
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-xs text-gray-500">
-                          No power data for today
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="border-t border-gray-200 pt-2">
-                      <div className="font-semibold text-gray-700 mb-2">Weekly Avg Utilization</div>
-                      <div className="flex items-center gap-2">
-                        <div className="text-lg font-bold text-blue-600">{weeklyAverage}%</div>
-                        <div className="flex-1 bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-blue-600 h-2 rounded-full"
-                            style={{ width: `${Math.min(weeklyAverage, 100)}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {weekData.length > 0 && (
-                      <div className="border-t border-gray-200 pt-2">
-                        <div className="font-semibold text-gray-700 mb-2">7-Day Trend</div>
-                        <ResponsiveContainer width="100%" height={100}>
-                          <LineChart data={weekData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                            <XAxis dataKey="dateShort" tick={{ fontSize: 9 }} />
-                            <YAxis domain={[0, 100]} tick={{ fontSize: 9 }} />
-                            <ChartTooltip 
-                              formatter={(value) => `${value}%`}
-                              contentStyle={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '4px', fontSize: '11px' }}
-                            />
-                            <Line 
-                              type="monotone" 
-                              dataKey="utilization" 
-                              stroke="#3b82f6" 
-                              dot={{ fill: '#3b82f6', r: 2 }}
-                              strokeWidth={1.5}
-                              isAnimationActive={false}
-                            />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    )}
-
-                    <div className="border-t border-gray-200 pt-2 space-y-2">
-                      <button
-                        onClick={() => setShowHistory(prev => ({
-                          ...prev,
-                          [equipment.equipment_id]: !prev[equipment.equipment_id]
-                        }))}
-                        className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-2 rounded flex items-center justify-center gap-1 transition-colors"
-                      >
-                        <span>🕐</span>
-                        {isShowingHistory ? 'Hide' : 'Show'} Location History
-                      </button>
-
-                      <Link
-                        href={`/equipment/${equipment.equipment_id}/details`}
-                        className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white py-2 px-2 rounded flex items-center justify-center gap-1 transition-colors font-medium no-underline"
-                      >
-                        <span className="text-white">View Details</span>
-                        <span>→</span>
-                      </Link>
-                    </div>
-                  </div>
+                <Popup 
+                  autoClose={false}
+                  closeOnClick={false}
+                  closeButton={true}
+                >
+                  <EquipmentPopupContent 
+                    equipment={equipment}
+                    onViewDetails={handleViewDetails}
+                    onToggleHistory={handleToggleHistory}
+                    loadingEquipmentId={loadingEquipmentId}
+                  />
                 </Popup>
               </Marker>
             </div>

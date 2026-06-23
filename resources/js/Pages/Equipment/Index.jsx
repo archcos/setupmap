@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Activity, AlertCircle, Calendar, ChevronDown, Clock, Filter, TrendingUp, Zap } from 'lucide-react';
+import { Activity, AlertCircle, Calendar, ChevronDown, Clock, Filter, TrendingUp, Zap, Search, LayoutGrid, List } from 'lucide-react';
 import { Head, router } from '@inertiajs/react';
 import EquipmentHeader from './components/index/EquipmentHeader';
 import EquipmentCharts from './components/index/EquipmentCharts';
@@ -8,6 +8,89 @@ import { processGraphData } from './components/index/equipmentUtils';
 import { getDateRange, getDateLabel } from './components/index/equipmentUtils';
 
 const ITEMS_PER_PAGE = 10;
+
+// Skeleton Components
+const SkeletonCard = () => (
+  <div className="bg-white rounded-lg shadow p-3 sm:p-4 border border-gray-200 animate-pulse">
+    <div className="flex items-center justify-between">
+      <div className="h-3 bg-gray-200 rounded w-24"></div>
+      <div className="h-4 w-4 bg-gray-200 rounded"></div>
+    </div>
+    <div className="h-8 bg-gray-200 rounded w-16 mt-2"></div>
+    <div className="h-3 bg-gray-200 rounded w-20 mt-1"></div>
+  </div>
+);
+
+const SkeletonChart = () => (
+  <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 border border-gray-200 animate-pulse">
+    <div className="h-5 bg-gray-200 rounded w-48 mb-4"></div>
+    <div className="space-y-3">
+      <div className="h-4 bg-gray-200 rounded w-full"></div>
+      <div className="flex items-end gap-2 h-[250px]">
+        {[...Array(12)].map((_, i) => (
+          <div key={i} className="flex-1 bg-gray-200 rounded-t" style={{ height: `${Math.random() * 60 + 40}%` }}></div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+const SkeletonGridCard = () => (
+  <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden animate-pulse">
+    <div className="p-3 sm:p-4 bg-gray-200">
+      <div className="space-y-2">
+        <div className="h-5 bg-gray-300 rounded w-3/4"></div>
+        <div className="h-3 bg-gray-300 rounded w-1/3"></div>
+      </div>
+    </div>
+    <div className="p-3 sm:p-4 space-y-3">
+      <div className="space-y-2">
+        <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+        <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+      </div>
+      <div className="h-1.5 bg-gray-200 rounded-full"></div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="bg-gray-100 p-2 rounded-lg">
+          <div className="h-3 bg-gray-200 rounded w-12 mb-1"></div>
+          <div className="h-4 bg-gray-200 rounded w-16"></div>
+        </div>
+        <div className="bg-gray-100 p-2 rounded-lg">
+          <div className="h-3 bg-gray-200 rounded w-12 mb-1"></div>
+          <div className="h-4 bg-gray-200 rounded w-16"></div>
+        </div>
+      </div>
+      <div className="h-10 bg-gray-200 rounded-lg"></div>
+    </div>
+  </div>
+);
+
+const SkeletonListRow = () => (
+  <tr className="animate-pulse">
+    <td className="px-3 py-2.5">
+      <div className="h-4 bg-gray-200 rounded w-32 mb-1"></div>
+      <div className="h-3 bg-gray-200 rounded w-20"></div>
+    </td>
+    <td className="px-3 py-2.5 hidden sm:table-cell">
+      <div className="h-4 bg-gray-200 rounded w-24"></div>
+    </td>
+    <td className="px-3 py-2.5 hidden md:table-cell">
+      <div className="h-4 bg-gray-200 rounded w-28"></div>
+    </td>
+    <td className="px-3 py-2.5">
+      <div className="h-6 bg-gray-200 rounded-full w-16"></div>
+    </td>
+    <td className="px-3 py-2.5">
+      <div className="h-4 bg-gray-200 rounded w-12 mb-1"></div>
+      <div className="h-3 bg-gray-200 rounded w-16"></div>
+    </td>
+    <td className="px-3 py-2.5 hidden lg:table-cell">
+      <div className="h-4 bg-gray-200 rounded w-12"></div>
+    </td>
+    <td className="px-3 py-2.5">
+      <div className="h-4 bg-gray-200 rounded w-12"></div>
+    </td>
+  </tr>
+);
 
 export default function Index() {
   const [allEquipmentData, setAllEquipmentData] = useState([]);
@@ -98,18 +181,7 @@ export default function Index() {
     return filteredData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
   }, [filteredData, currentPage]);
 
-  const handleViewDetails = useCallback((id) => router.visit(`/equipment/${id}/details`), []);
-
-  if (loading && isInitialLoad) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="bg-white p-8 rounded-lg shadow-md text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  const handleViewDetails = useCallback((id) => router.visit(`/equipment/details/${id}`), []);
 
   if (error) {
     return (
@@ -135,36 +207,36 @@ export default function Index() {
         selectedLocation={selectedLocation}
         dateFilter={dateFilter}
         selectedDate={selectedDate}
-        loading={loading} // Pass loading state
+        loading={loading}
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
-        {loading && !isInitialLoad && (
-          <div className="fixed inset-0 bg-black/10 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 shadow-xl">
-              <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-600 border-t-transparent mx-auto"></div>
-              <p className="text-sm text-gray-600 mt-3">Updating...</p>
-            </div>
-          </div>
-        )}
-
         {/* Summary Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-4">
-          {[
-            { label: 'Total Equipment', value: stats.total, sub: `${stats.active} active · ${stats.inactive} inactive`, icon: Activity, color: 'text-gray-900' },
-            { label: 'Avg Utilization', value: `${stats.avgUtil.toFixed(1)}%`, sub: '8h = 100%', icon: TrendingUp, color: 'text-blue-600' },
-            { label: 'Total Active Hours', value: `${stats.totalHours.toFixed(1)}h`, sub: 'Combined', icon: Clock, color: 'text-green-600' },
-            { label: 'Avg Power (Active)', value: `${stats.avgPower.toFixed(1)}W`, sub: 'Active only', icon: Zap, color: 'text-orange-600' },
-          ].map((card, i) => (
-            <div key={i} className="bg-white rounded-lg shadow p-3 sm:p-4 border border-gray-200">
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-gray-600 font-medium">{card.label}</p>
-                <card.icon size={16} className="text-gray-400" />
+          {loading && allEquipmentData.length === 0 ? (
+            <>
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+            </>
+          ) : (
+            [
+              { label: 'Total Equipment', value: stats.total, sub: `${stats.active} active · ${stats.inactive} inactive`, icon: Activity, color: 'text-gray-900' },
+              { label: 'Avg Utilization', value: `${stats.avgUtil.toFixed(1)}%`, sub: '8h = 100%', icon: TrendingUp, color: 'text-blue-600' },
+              { label: 'Total Active Hours', value: `${stats.totalHours.toFixed(1)}h`, sub: 'Combined', icon: Clock, color: 'text-green-600' },
+              { label: 'Avg Power (Active)', value: `${stats.avgPower.toFixed(1)}W`, sub: 'Active only', icon: Zap, color: 'text-orange-600' },
+            ].map((card, i) => (
+              <div key={i} className="bg-white rounded-lg shadow p-3 sm:p-4 border border-gray-200">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-gray-600 font-medium">{card.label}</p>
+                  <card.icon size={16} className="text-gray-400" />
+                </div>
+                <p className={`text-xl sm:text-2xl font-bold mt-1 ${card.color}`}>{card.value}</p>
+                <p className="text-xs text-gray-500">{card.sub}</p>
               </div>
-              <p className={`text-xl sm:text-2xl font-bold mt-1 ${card.color}`}>{card.value}</p>
-              <p className="text-xs text-gray-500">{card.sub}</p>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
         {/* Location Filter */}
@@ -173,14 +245,22 @@ export default function Index() {
             <Filter size={18} className="text-blue-600" />
             <h3 className="text-sm font-semibold text-gray-900">Filter by Location</h3>
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {locations.map(loc => (
-              <button key={loc} onClick={() => setSelectedLocation(loc)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${selectedLocation === loc ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                {loc === 'all' ? 'All Locations' : loc}
-              </button>
-            ))}
-          </div>
+          {loading && allEquipmentData.length === 0 ? (
+            <div className="flex gap-1.5">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-8 bg-gray-200 rounded-lg animate-pulse" style={{ width: `${Math.random() * 40 + 80}px` }}></div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {locations.map(loc => (
+                <button key={loc} onClick={() => setSelectedLocation(loc)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${selectedLocation === loc ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                  {loc === 'all' ? 'All Locations' : loc}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Date Range Selector */}
@@ -301,24 +381,74 @@ export default function Index() {
         </div>
 
         {/* Charts */}
-        <EquipmentCharts graphData={graphData} />
+        {loading && allEquipmentData.length === 0 ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-4">
+            <SkeletonChart />
+            <SkeletonChart />
+          </div>
+        ) : (
+          <EquipmentCharts graphData={graphData} />
+        )}
 
-        {/* Equipment List */}
-        <EquipmentList
-          filteredData={filteredData}
-          paginatedData={paginatedData}
-          viewMode={viewMode}
-          setViewMode={setViewMode}
-          filterStatus={filterStatus}
-          setFilterStatus={setFilterStatus}
-          searchTerm={searchTerm}
-          setSearchTerm={setSearchTerm}
-          allEquipmentData={allEquipmentData}
-          currentPage={currentPage}
-          totalPages={Math.ceil(filteredData.length / ITEMS_PER_PAGE)}
-          onPageChange={setCurrentPage}
-          onViewDetails={handleViewDetails}
-        />
+        {/* Equipment List with built-in filters */}
+        {loading && allEquipmentData.length === 0 ? (
+          /* Skeleton for filters and list */
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div className="flex flex-wrap gap-1.5">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="h-8 bg-gray-200 rounded-lg animate-pulse" style={{ width: `${Math.random() * 30 + 80}px` }}></div>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="h-9 bg-gray-200 rounded-lg animate-pulse w-32 sm:w-48"></div>
+                <div className="h-9 bg-gray-200 rounded-lg animate-pulse w-16"></div>
+              </div>
+            </div>
+            {viewMode === 'grid' ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+                {[...Array(6)].map((_, i) => <SkeletonGridCard key={i} />)}
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow-lg overflow-hidden border border-gray-200">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[600px]">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Equipment</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">Owner</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Location</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Utilization</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase hidden lg:table-cell">Power</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {[...Array(8)].map((_, i) => <SkeletonListRow key={i} />)}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <EquipmentList
+            filteredData={filteredData}
+            paginatedData={paginatedData}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            filterStatus={filterStatus}
+            setFilterStatus={setFilterStatus}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            allEquipmentData={allEquipmentData}
+            currentPage={currentPage}
+            totalPages={Math.ceil(filteredData.length / ITEMS_PER_PAGE)}
+            onPageChange={setCurrentPage}
+            onViewDetails={handleViewDetails}
+          />
+        )}
       </div>
     </div>
   );

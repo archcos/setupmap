@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/equipment', [EquipmentController::class, 'index'])->name('equipment.index');
 Route::get('/equipment-utilization', [EquipmentController::class, 'utilizations'])->name('equipment.utilizations');
-Route::get('/equipment/{equipmentId}/details', [EquipmentController::class, 'detailsPage'])->name('equipment.details');
+Route::get('/equipment/details/{equipmentId}', [EquipmentController::class, 'detailsPage'])->name('equipment.details');
 Route::get('/equipment/{equipmentId}', [EquipmentController::class, 'show'])->name('equipment.show');
 
 Route::get('/map', [MapController::class, 'index'])->name('map.index');
