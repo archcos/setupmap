@@ -1,9 +1,10 @@
 // components/index/EquipmentHeader.jsx
 import { useState } from 'react';
 import { ArrowLeft, Activity, Info } from 'lucide-react';
-import { router } from '@inertiajs/react';
+import { router, Link } from '@inertiajs/react';
 import ExportDropdown from '../ExportDropdown'; // Changed from './common/ExportDropdown'
 import { getFilterDescriptions } from './downloadUtils'; // Changed path
+import P3Logo from '@/../../resources/assets/P3_LOGO.png';
 
 export default function EquipmentHeader({ 
   dateRangeLabel, 
@@ -37,10 +38,22 @@ export default function EquipmentHeader({
               <ArrowLeft size={18} />
               <span className="hidden sm:inline">Back</span>
             </button>
-            <div className="flex items-center gap-2">
-              <Activity className="text-blue-600" size={24} />
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Equipment Management</h1>
-            </div>
+            
+            {/* P3 Logo */}
+            <Link 
+              href="/" 
+              className="flex items-center gap-3 transition-transform hover:scale-105 duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg"
+              aria-label="Go to home"
+            >
+              <img 
+                src={P3Logo} 
+                alt="P3 Logo" 
+                className="h-10 w-auto sm:h-12 drop-shadow-[0_0_10px_rgba(59,130,246,0.1)]"
+              />
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Equipment Management</h1>
+              </div>
+            </Link>
           </div>
           
           <div className="flex items-center gap-3">

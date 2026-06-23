@@ -9,13 +9,12 @@ class AdminAuth
 {
     public function handle(Request $request, Closure $next)
     {
-        if (!session()->has('admin_user')) {
+        if (!session('admin_user') || !session('admin_access_token')) {
             return redirect()->route('admin.login');
         }
 
-        // Share admin user data with all views
-        $adminUser = session('admin_user');
-        inertia()->share('adminUser', $adminUser);
+        // Optional: Check if token is still valid
+        // You can call the checkSession endpoint here
 
         return $next($request);
     }

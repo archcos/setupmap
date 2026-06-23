@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\SupabaseService;
+use App\Services\SupabaseDataService;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 
 class MapController extends Controller
 {
-    public function __construct(private SupabaseService $supabase)
+    public function __construct(private SupabaseDataService $supabaseData)
     {
         Log::info('MapController initialized');
     }
@@ -21,7 +21,7 @@ class MapController extends Controller
         try {
             // Get ALL equipment data in ONE API call with nested relations
             // This includes locations, power_consumptions, and utilizations
-            $equipmentsWithRelations = $this->supabase->getCompleteEquipmentData();
+            $equipmentsWithRelations = $this->supabaseData->getCompleteEquipmentData();
             Log::info('Fetched equipment data', ['count' => count($equipmentsWithRelations)]);
 
             // Transform the data for the map view
@@ -195,7 +195,7 @@ class MapController extends Controller
 
         try {
             // Use the SAME cached method
-            $equipments = $this->supabase->getCompleteEquipmentData();
+            $equipments = $this->supabaseData->getCompleteEquipmentData();
             
             // Extract locations from cached data
             $locations = [];
@@ -236,7 +236,7 @@ class MapController extends Controller
         Log::info('API: Clearing map data cache');
 
         try {
-            Cache::forget('complete_equipment_data');
+            $this->supabaseData->clearAllCache();
             Log::info('API: Cache cleared successfully');
 
             return response()->json(['message' => 'Cache cleared successfully']);

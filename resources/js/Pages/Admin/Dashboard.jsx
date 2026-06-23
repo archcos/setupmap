@@ -3,7 +3,7 @@ import { useState, useMemo } from 'react';
 import { Head, useForm, router } from '@inertiajs/react';
 import { 
   LogOut, Plus, Edit2, X, MapPin, Search,
-  Save, Loader, Wrench, ChevronDown, FolderKanban, AlertCircle, AlertTriangle
+  Save, Loader, Wrench, ChevronDown, FolderKanban, AlertCircle, AlertTriangle, User
 } from 'lucide-react';
 
 const LOCATIONS = ['BUK', 'CAM', 'LDN', 'MOC', 'MOR'];
@@ -66,6 +66,21 @@ export default function AdminDashboard({ equipments = [], projects = [], adminUs
   const selectedProject = projects.find(p => p.project_id === addForm.data.project_id);
   const editSelectedProject = projects.find(p => p.project_id === editForm.data.project_id);
 
+  // Get user display name or email
+  const getUserDisplayName = () => {
+    if (adminUser?.first_name && adminUser?.last_name) {
+      return `${adminUser.first_name} ${adminUser.last_name}`;
+    }
+    if (adminUser?.email) {
+      return adminUser.email;
+    }
+    return 'Admin';
+  };
+
+  const getUserEmail = () => {
+    return adminUser?.email || 'No email provided';
+  };
+
   const handleAdd = (e) => {
     e.preventDefault();
     
@@ -85,8 +100,9 @@ export default function AdminDashboard({ equipments = [], projects = [], adminUs
       alert('Please select expected location');
       return;
     }
-    if (!addForm.data.latitude || !addForm.data.longitude) {
-      alert('Please enter both latitude and longitude');
+    if (!addForm.data.latitude || !addForm.data.longitude || 
+        isNaN(addForm.data.latitude) || isNaN(addForm.data.longitude)) {
+      alert('Please enter valid latitude and longitude');
       return;
     }
 
@@ -120,13 +136,14 @@ export default function AdminDashboard({ equipments = [], projects = [], adminUs
       alert('Please select expected location');
       return;
     }
-    if (!editForm.data.latitude || !editForm.data.longitude) {
-      alert('Please enter both latitude and longitude');
+    if (!editForm.data.latitude || !editForm.data.longitude || 
+        isNaN(editForm.data.latitude) || isNaN(editForm.data.longitude)) {
+      alert('Please enter valid latitude and longitude');
       return;
     }
 
     // Confirm if project is being changed
-    if (editForm.data.project_id !== editingEquipment.project_id) {
+    if (editForm.data.project_id !== editingEquipment?.project_id) {
       const confirmed = window.confirm(
         '⚠️ You are changing the project for this equipment.\n\n' +
         'This will:\n' +
@@ -149,6 +166,10 @@ export default function AdminDashboard({ equipments = [], projects = [], adminUs
         setShowEditProjectDropdown(false);
         setShowEditLocationDropdown(false);
       },
+      onError: (errors) => {
+        console.error('Update failed:', errors);
+        alert('Failed to update equipment. Please check your input and try again.');
+      }
     });
   };
 
@@ -160,8 +181,8 @@ export default function AdminDashboard({ equipments = [], projects = [], adminUs
       owner: equipment.owner || '',
       expected_location: equipment.expected_location || '',
       equipment_specifications: equipment.equipment_specifications || '',
-      latitude: equipment.initial_location?.latitude || '',
-      longitude: equipment.initial_location?.longitude || '',
+      latitude: equipment.initial_location?.latitude?.toString() || '',
+      longitude: equipment.initial_location?.longitude?.toString() || '',
     });
     setShowEditModal(true);
   };
@@ -195,9 +216,12 @@ export default function AdminDashboard({ equipments = [], projects = [], adminUs
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900">Admin Dashboard</h1>
-                <p className="text-sm text-gray-500">
-                  Welcome, {adminUser?.first_name} {adminUser?.last_name}
-                </p>
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <User size={14} className="text-gray-400" />
+                  <span>Welcome, <span className="font-semibold text-gray-700">{getUserDisplayName()}</span></span>
+                  <span className="text-gray-300">|</span>
+                  <span className="text-gray-400">{getUserEmail()}</span>
+                </div>
               </div>
             </div>
             
@@ -501,10 +525,12 @@ export default function AdminDashboard({ equipments = [], projects = [], adminUs
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Latitude {requiredField()}</label>
                     <input
-                      type="number"
-                      step="any"
+                      type="text"
+                      inputMode="decimal"
+                      name="latitude"
                       value={addForm.data.latitude}
                       onChange={(e) => addForm.setData('latitude', e.target.value)}
+                      onInput={(e) => addForm.setData('latitude', e.currentTarget.value)}
                       required
                       placeholder="14.5995"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -513,10 +539,12 @@ export default function AdminDashboard({ equipments = [], projects = [], adminUs
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Longitude {requiredField()}</label>
                     <input
-                      type="number"
-                      step="any"
+                      type="text"
+                      inputMode="decimal"
+                      name="longitude"
                       value={addForm.data.longitude}
                       onChange={(e) => addForm.setData('longitude', e.target.value)}
+                      onInput={(e) => addForm.setData('longitude', e.currentTarget.value)}
                       required
                       placeholder="120.9842"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -762,10 +790,12 @@ export default function AdminDashboard({ equipments = [], projects = [], adminUs
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Latitude {requiredField()}</label>
                     <input
-                      type="number"
-                      step="any"
+                      type="text"
+                      inputMode="decimal"
+                      name="latitude"
                       value={editForm.data.latitude}
                       onChange={(e) => editForm.setData('latitude', e.target.value)}
+                      onInput={(e) => editForm.setData('latitude', e.currentTarget.value)}
                       required
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
@@ -773,10 +803,12 @@ export default function AdminDashboard({ equipments = [], projects = [], adminUs
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Longitude {requiredField()}</label>
                     <input
-                      type="number"
-                      step="any"
+                      type="text"
+                      inputMode="decimal"
+                      name="longitude"
                       value={editForm.data.longitude}
                       onChange={(e) => editForm.setData('longitude', e.target.value)}
+                      onInput={(e) => editForm.setData('longitude', e.currentTarget.value)}
                       required
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />

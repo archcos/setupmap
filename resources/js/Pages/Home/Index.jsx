@@ -2,6 +2,7 @@ import { MapPin, Zap, ArrowRight, Sparkles, Stars, Loader2 } from 'lucide-react'
 import { useRef, useState } from 'react';
 import SetupLogo from '@/../../resources/assets/SETUP_logo.webp';
 import Logo from '@/../../resources/assets/logo.webp';
+import P3Logo from '@/../../resources/assets/P3_LOGO.png';
 import LogoSong from '@/../../resources/assets/LOGOSONG.mp3';
 import { Head } from '@inertiajs/react';
 
@@ -9,6 +10,7 @@ export default function Index() {
   const audioRef = useRef(null);
   const [logoHovered, setLogoHovered] = useState(false);
   const [setupLogoHovered, setSetupLogoHovered] = useState(false);
+  const [p3LogoHovered, setP3LogoHovered] = useState(false);
   const [activeCard, setActiveCard] = useState(null);
   const [loadingButton, setLoadingButton] = useState(null); // 'equipment' or 'location'
 
@@ -86,7 +88,29 @@ export default function Index() {
       
       <div className="relative w-full max-w-6xl">
         <Head title="DOST-NorMin SETUP P3 Portal" />
-        {/* Website Title - Centered at top */}
+        
+        {/* P3 Logo - Main Logo at top center */}
+        <div className="flex justify-center mb-8 lg:mb-10">
+          <button
+            onClick={playLogoSound}
+            onMouseEnter={() => {
+              setP3LogoHovered(true);
+              playLogoSound();
+            }}
+            onMouseLeave={() => setP3LogoHovered(false)}
+            className="group relative inline-block focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-4 rounded-2xl"
+            aria-label="Play P3 logo sound"
+          >
+            <div className={`absolute -inset-4 bg-gradient-to-r from-blue-400/20 via-purple-400/20 to-pink-400/20 rounded-2xl blur-xl transition-all duration-700 ${p3LogoHovered ? 'opacity-100 scale-110' : 'opacity-0 scale-90'}`} />
+            <img 
+              src={P3Logo} 
+              alt="P3 Logo" 
+              className="relative h-20 sm:h-24 md:h-28 transition-all duration-300 group-hover:scale-105 group-hover:drop-shadow-[0_0_30px_rgba(59,130,246,0.3)]"
+            />
+          </button>
+        </div>
+
+        {/* Website Title - Centered */}
         <div className="text-center mb-12 lg:mb-16">
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent animate-gradient-x mb-3">
             DOST-NorMin SETUP P3 Portal

@@ -2,8 +2,6 @@
 
 use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\AdminController;
-use App\Http\Controllers\Api\ProvinceController;
-use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EquipmentController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\MapController;
@@ -27,11 +25,19 @@ Route::prefix('admin')->group(function () {
     Route::post('/login', [AdminAuthController::class, 'login']);
     Route::post('/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
     
-    // Protected routes
+    // Protected routes - Admin middleware
     Route::middleware(['admin.auth'])->group(function () {
         Route::get('/dashboard', [AdminController::class, 'index'])->name('admin.dashboard');
+        
+        // Equipment CRUD routes
         Route::post('/equipment', [AdminController::class, 'store'])->name('admin.equipment.store');
         Route::put('/equipment/{id}', [AdminController::class, 'update'])->name('admin.equipment.update');
+        Route::delete('/equipment/{id}', [AdminController::class, 'destroy'])->name('admin.equipment.destroy');
+        
+        // Optional: Equipment restore route
+        Route::post('/equipment/{id}/restore', [AdminController::class, 'restore'])->name('admin.equipment.restore');
+        
+        // Logout (GET fallback)
         Route::get('/logout', [AdminAuthController::class, 'logout'])->name('admin.logout.get');
     });
 });

@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\SupabaseService;
+use App\Services\SupabaseDataService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
@@ -10,7 +10,7 @@ use Inertia\Inertia;
 
 class EquipmentController extends Controller
 {
-    public function __construct(private SupabaseService $supabase)
+    public function __construct(private SupabaseDataService $supabaseData)
     {
     }
 
@@ -26,103 +26,100 @@ class EquipmentController extends Controller
      * API endpoint for equipment utilization data
      * OPTIMIZED: Uses cached complete data, calculates once
      */
-/**
- * API endpoint for equipment utilization data
- */
-public function utilizations(Request $request)
-{
-    $startDate = $request->get('start_date');
-    $endDate = $request->get('end_date');
-    
-    $cacheKey = 'equipment_utilization_' . md5($startDate . $endDate);
-    
-    return Cache::remember($cacheKey, 300, function () use ($startDate, $endDate) {
-        Log::info('Calculating equipment utilization', [
-            'start_date' => $startDate,
-            'end_date' => $endDate
-        ]);
+    public function utilizations(Request $request)
+    {
+        $startDate = $request->get('start_date');
+        $endDate = $request->get('end_date');
+        
+        $cacheKey = 'equipment_utilization_' . md5($startDate . $endDate);
+        
+        return Cache::remember($cacheKey, 300, function () use ($startDate, $endDate) {
+            Log::info('Calculating equipment utilization', [
+                'start_date' => $startDate,
+                'end_date' => $endDate
+            ]);
 
-        try {
-            $equipments = $this->supabase->getCompleteEquipmentData();
-            
-            $result = array_map(function ($equipment) use ($startDate, $endDate) {
-                $utilizations = $equipment['utilizations'] ?? [];
-                $powerConsumptions = $equipment['power_consumptions'] ?? [];
+            try {
+                $equipments = $this->supabaseData->getCompleteEquipmentData();
                 
-                // Filter by date range
-                if ($startDate || $endDate) {
-                    $utilizations = array_values(array_filter($utilizations, function ($record) use ($startDate, $endDate) {
-                        $timestamp = strtotime($record['created_at'] ?? '');
-                        if (!$timestamp) return false;
-                        if ($startDate && $timestamp < strtotime($startDate)) return false;
-                        if ($endDate && $timestamp > strtotime($endDate) + 86400) return false;
-                        return true;
-                    }));
+                $result = array_map(function ($equipment) use ($startDate, $endDate) {
+                    $utilizations = $equipment['utilizations'] ?? [];
+                    $powerConsumptions = $equipment['power_consumptions'] ?? [];
                     
-                    $powerConsumptions = array_values(array_filter($powerConsumptions, function ($record) use ($startDate, $endDate) {
-                        $timestamp = strtotime($record['created_at'] ?? '');
-                        if (!$timestamp) return false;
-                        if ($startDate && $timestamp < strtotime($startDate)) return false;
-                        if ($endDate && $timestamp > strtotime($endDate) + 86400) return false;
-                        return true;
-                    }));
-                }
+                    // Filter by date range
+                    if ($startDate || $endDate) {
+                        $utilizations = array_values(array_filter($utilizations, function ($record) use ($startDate, $endDate) {
+                            $timestamp = strtotime($record['created_at'] ?? '');
+                            if (!$timestamp) return false;
+                            if ($startDate && $timestamp < strtotime($startDate)) return false;
+                            if ($endDate && $timestamp > strtotime($endDate) + 86400) return false;
+                            return true;
+                        }));
+                        
+                        $powerConsumptions = array_values(array_filter($powerConsumptions, function ($record) use ($startDate, $endDate) {
+                            $timestamp = strtotime($record['created_at'] ?? '');
+                            if (!$timestamp) return false;
+                            if ($startDate && $timestamp < strtotime($startDate)) return false;
+                            if ($endDate && $timestamp > strtotime($endDate) + 86400) return false;
+                            return true;
+                        }));
+                    }
+                    
+                    // Calculate summary stats
+                    $utilizationHours = $this->calculateUtilizationHours($utilizations);
+                    $utilizationPercentage = $utilizationHours > 0 ? min(($utilizationHours / 8) * 100, 100) : 0;
+                    
+                    $latestPower = $powerConsumptions[0]['consumption'] ?? 0;
+                    
+                    $avgPower = 0;
+                    if (!empty($powerConsumptions)) {
+                        $totalPower = array_sum(array_column($powerConsumptions, 'consumption'));
+                        $avgPower = count($powerConsumptions) > 0 ? $totalPower / count($powerConsumptions) : 0;
+                    }
+                    
+                    // Check if active in last hour
+                    $isActive = false;
+                    if (!empty($utilizations)) {
+                        $latestUtil = $utilizations[0];
+                        $latestTime = strtotime($latestUtil['created_at'] ?? '');
+                        $oneHourAgo = now()->subHour()->timestamp;
+                        $isActive = ($latestUtil['type'] == true || $latestUtil['type'] === 1) && $latestTime >= $oneHourAgo;
+                    }
+                    
+                    return [
+                        'equipment_id' => $equipment['equipment_id'] ?? 'Unknown',
+                        'equipment_name' => $equipment['equipment_name'] ?? 'Unknown',
+                        'owner' => $equipment['owner'] ?? 'Unknown',
+                        'expected_location' => $equipment['expected_location'] ?? 'Unknown',
+                        'is_active' => $isActive,
+                        'utilization_hours_8h' => round($utilizationHours, 2),
+                        'utilization_percentage_8h' => round($utilizationPercentage, 2),
+                        'power_consumption' => round($latestPower, 2),
+                        'avg_power_8h' => round($avgPower, 2),
+                        'updated_at' => $equipment['updated_at'] ?? now()->toIso8601String(),
+                        // IMPORTANT: Include raw data for graphs
+                        'utilizations' => $utilizations,
+                        'power_consumptions' => $powerConsumptions,
+                    ];
+                }, $equipments);
                 
-                // Calculate summary stats
-                $utilizationHours = $this->calculateUtilizationHours($utilizations);
-                $utilizationPercentage = $utilizationHours > 0 ? min(($utilizationHours / 8) * 100, 100) : 0;
+                $result = array_values(array_filter($result));
                 
-                $latestPower = $powerConsumptions[0]['consumption'] ?? 0;
+                Log::info('Equipment utilization calculated', [
+                    'count' => count($result),
+                    'sample_util_count' => count($result[0]['utilizations'] ?? []),
+                    'sample_power_count' => count($result[0]['power_consumptions'] ?? [])
+                ]);
                 
-                $avgPower = 0;
-                if (!empty($powerConsumptions)) {
-                    $totalPower = array_sum(array_column($powerConsumptions, 'consumption'));
-                    $avgPower = count($powerConsumptions) > 0 ? $totalPower / count($powerConsumptions) : 0;
-                }
-                
-                // Check if active in last hour
-                $isActive = false;
-                if (!empty($utilizations)) {
-                    $latestUtil = $utilizations[0];
-                    $latestTime = strtotime($latestUtil['created_at'] ?? '');
-                    $oneHourAgo = now()->subHour()->timestamp;
-                    $isActive = ($latestUtil['type'] == true || $latestUtil['type'] === 1) && $latestTime >= $oneHourAgo;
-                }
-                
-                return [
-                    'equipment_id' => $equipment['equipment_id'] ?? 'Unknown',
-                    'equipment_name' => $equipment['equipment_name'] ?? 'Unknown',
-                    'owner' => $equipment['owner'] ?? 'Unknown',
-                    'expected_location' => $equipment['expected_location'] ?? 'Unknown',
-                    'is_active' => $isActive,
-                    'utilization_hours_8h' => round($utilizationHours, 2),
-                    'utilization_percentage_8h' => round($utilizationPercentage, 2),
-                    'power_consumption' => round($latestPower, 2),
-                    'avg_power_8h' => round($avgPower, 2),
-                    'updated_at' => $equipment['updated_at'] ?? now()->toIso8601String(),
-                    // IMPORTANT: Include raw data for graphs
-                    'utilizations' => $utilizations,
-                    'power_consumptions' => $powerConsumptions,
-                ];
-            }, $equipments);
-            
-            $result = array_values(array_filter($result));
-            
-            Log::info('Equipment utilization calculated', [
-                'count' => count($result),
-                'sample_util_count' => count($result[0]['utilizations'] ?? []),
-                'sample_power_count' => count($result[0]['power_consumptions'] ?? [])
-            ]);
-            
-            return $result;
-        } catch (\Exception $e) {
-            Log::error('Failed to calculate equipment utilization', [
-                'error' => $e->getMessage()
-            ]);
-            return [];
-        }
-    });
-}
+                return $result;
+            } catch (\Exception $e) {
+                Log::error('Failed to calculate equipment utilization', [
+                    'error' => $e->getMessage()
+                ]);
+                return [];
+            }
+        });
+    }
 
     /**
      * API endpoint for map data
@@ -133,8 +130,8 @@ public function utilizations(Request $request)
         Log::info('EquipmentController: Fetching map data');
         
         try {
-            // Use the SAME cached method from SupabaseService
-            $equipments = $this->supabase->getCompleteEquipmentData();
+            // Use the SAME cached method from SupabaseDataService
+            $equipments = $this->supabaseData->getCompleteEquipmentData();
             
             // Transform for map display
             $transformedEquipments = array_map(function ($equipment) {
@@ -160,198 +157,132 @@ public function utilizations(Request $request)
         }
     }
 
-/**
- * Equipment details page - OPTIMIZED single query
- */
-public function detailsPage($equipmentId)
-{
-    try {
-        // Use a single query to get equipment with all relations
-        $equipment = $this->supabase->getEquipmentWithAllRelations($equipmentId);
-        
-        if (!$equipment) {
+    /**
+     * Equipment details page - OPTIMIZED single query
+     */
+    public function detailsPage($equipmentId)
+    {
+        try {
+            // Use a single query to get equipment with all relations
+            $equipment = $this->supabaseData->getEquipmentWithAllRelations($equipmentId);
+            
+            if (!$equipment) {
+                return Inertia::render('Equipment/Details', [
+                    'equipment' => null
+                ]);
+            }
+            
+            // Process the data that's already fetched
+            $equipment['locations'] = $equipment['locations'] ?? [];
+            $equipment['power_consumptions'] = $equipment['power_consumptions'] ?? [];
+            $equipment['utilizations'] = $equipment['utilizations'] ?? [];
+            
+            // Set initial values from already fetched data
+            $equipment['power_consumption'] = $equipment['power_consumptions'][0]['consumption'] ?? 0;
+            
+            // Check if active in last hour
+            $equipment['is_active'] = false;
+            if (!empty($equipment['utilizations'])) {
+                $latestUtil = $equipment['utilizations'][0];
+                $latestTime = strtotime($latestUtil['created_at'] ?? '');
+                $oneHourAgo = now()->subHour()->timestamp;
+                $equipment['is_active'] = ($latestUtil['type'] == true || $latestUtil['type'] === 1) && $latestTime >= $oneHourAgo;
+            }
+            
+            $equipment['updated_at'] = $equipment['updated_at'] ?? now()->toIso8601String();
+            
+            return Inertia::render('Equipment/Details', [
+                'equipment' => $equipment
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to load equipment details', [
+                'equipment_id' => $equipmentId,
+                'error' => $e->getMessage()
+            ]);
+            
             return Inertia::render('Equipment/Details', [
                 'equipment' => null
             ]);
         }
-        
-        // Process the data that's already fetched
-        $equipment['locations'] = $equipment['locations'] ?? [];
-        $equipment['power_consumptions'] = $equipment['power_consumptions'] ?? [];
-        $equipment['utilizations'] = $equipment['utilizations'] ?? [];
-        
-        // Set initial values from already fetched data
-        $equipment['power_consumption'] = $equipment['power_consumptions'][0]['consumption'] ?? 0;
-        
-        // Check if active in last hour
-        $equipment['is_active'] = false;
-        if (!empty($equipment['utilizations'])) {
-            $latestUtil = $equipment['utilizations'][0];
-            $latestTime = strtotime($latestUtil['created_at'] ?? '');
-            $oneHourAgo = now()->subHour()->timestamp;
-            $equipment['is_active'] = ($latestUtil['type'] == true || $latestUtil['type'] === 1) && $latestTime >= $oneHourAgo;
-        }
-        
-        $equipment['updated_at'] = $equipment['updated_at'] ?? now()->toIso8601String();
-        
-        return Inertia::render('Equipment/Details', [
-            'equipment' => $equipment
-        ]);
-    } catch (\Exception $e) {
-        Log::error('Failed to load equipment details', [
-            'equipment_id' => $equipmentId,
-            'error' => $e->getMessage()
-        ]);
-        
-        return Inertia::render('Equipment/Details', [
-            'equipment' => null
-        ]);
     }
-}
-/**
- * API endpoint for single equipment data
- */
-/**
- * API endpoint for single equipment data - OPTIMIZED
- */
-public function show(Request $request, $equipmentId)
-{
-    $startDate = $request->get('start_date');
-    $endDate = $request->get('end_date');
-    
-    Log::info('Equipment data request', [
-        'equipment_id' => $equipmentId,
-        'start_date' => $startDate,
-        'end_date' => $endDate
-    ]);
-    
-    try {
-        // Use the optimized single query method
-        $equipment = $this->supabase->getEquipmentWithAllRelations($equipmentId);
-        
-        if (!$equipment) {
-            return response()->json(['error' => 'Equipment not found'], 404);
-        }
-        
-        // Filter power consumptions by date range if needed
-        $powerConsumptions = $equipment['power_consumptions'] ?? [];
-        if ($startDate || $endDate) {
-            $powerConsumptions = array_values(array_filter($powerConsumptions, function ($record) use ($startDate, $endDate) {
-                $timestamp = strtotime($record['created_at'] ?? '');
-                if (!$timestamp) return false;
-                if ($startDate && $timestamp < strtotime($startDate)) return false;
-                if ($endDate && $timestamp > strtotime($endDate) + 86400) return false;
-                return true;
-            }));
-        }
-        
-        // Filter utilizations by date range if needed
-        $utilizations = $equipment['utilizations'] ?? [];
-        if ($startDate || $endDate) {
-            $utilizations = array_values(array_filter($utilizations, function ($record) use ($startDate, $endDate) {
-                $timestamp = strtotime($record['created_at'] ?? '');
-                if (!$timestamp) return false;
-                if ($startDate && $timestamp < strtotime($startDate)) return false;
-                if ($endDate && $timestamp > strtotime($endDate) + 86400) return false;
-                return true;
-            }));
-            
-            // Sort ascending for proper display
-            usort($utilizations, function($a, $b) {
-                return strtotime($a['created_at'] ?? '0') - strtotime($b['created_at'] ?? '0');
-            });
-        }
-        
-        // Set current power and active status
-        $equipment['power_consumption'] = 0;
-        $equipment['is_active'] = false;
-        
-        if (!empty($powerConsumptions)) {
-            $latestPower = $powerConsumptions[0];
-            $latestTime = strtotime($latestPower['created_at'] ?? '');
-            $oneHourAgo = now()->subHour()->timestamp;
-            
-            if ($latestTime && $latestTime >= $oneHourAgo) {
-                $equipment['power_consumption'] = $latestPower['consumption'] ?? 0;
-                $equipment['is_active'] = true;
-            }
-        }
-        
-        $equipment['power_consumptions'] = $powerConsumptions;
-        $equipment['utilizations'] = $utilizations;
-        $equipment['updated_at'] = $equipment['updated_at'] ?? now()->toIso8601String();
-        
-        return response()->json($equipment);
-    } catch (\Exception $e) {
-        Log::error('Failed to fetch equipment', [
-            'equipment_id' => $equipmentId,
-            'error' => $e->getMessage()
-        ]);
-        return response()->json(['error' => $e->getMessage()], 500);
-    }
-}
 
     /**
-     * Calculate utilization data for a single equipment
+     * API endpoint for single equipment data - OPTIMIZED
      */
-    private function calculateEquipmentUtilization(array $equipment, ?string $startDate, ?string $endDate): ?array
+    public function show(Request $request, $equipmentId)
     {
+        $startDate = $request->get('start_date');
+        $endDate = $request->get('end_date');
+        
+        Log::info('Equipment data request', [
+            'equipment_id' => $equipmentId,
+            'start_date' => $startDate,
+            'end_date' => $endDate
+        ]);
+        
         try {
-            $equipmentId = $equipment['equipment_id'];
-            $utilizations = $equipment['utilizations'] ?? [];
-            $powerConsumptions = $equipment['power_consumptions'] ?? [];
+            // Use the optimized single query method
+            $equipment = $this->supabaseData->getEquipmentWithAllRelations($equipmentId);
             
-            // Filter by date range if provided
+            if (!$equipment) {
+                return response()->json(['error' => 'Equipment not found'], 404);
+            }
+            
+            // Filter power consumptions by date range if needed
+            $powerConsumptions = $equipment['power_consumptions'] ?? [];
             if ($startDate || $endDate) {
-                $utilizations = array_filter($utilizations, function ($record) use ($startDate, $endDate) {
-                    $timestamp = strtotime($record['created_at']);
+                $powerConsumptions = array_values(array_filter($powerConsumptions, function ($record) use ($startDate, $endDate) {
+                    $timestamp = strtotime($record['created_at'] ?? '');
+                    if (!$timestamp) return false;
                     if ($startDate && $timestamp < strtotime($startDate)) return false;
-                    if ($endDate && $timestamp > strtotime($endDate)) return false;
+                    if ($endDate && $timestamp > strtotime($endDate) + 86400) return false;
                     return true;
+                }));
+            }
+            
+            // Filter utilizations by date range if needed
+            $utilizations = $equipment['utilizations'] ?? [];
+            if ($startDate || $endDate) {
+                $utilizations = array_values(array_filter($utilizations, function ($record) use ($startDate, $endDate) {
+                    $timestamp = strtotime($record['created_at'] ?? '');
+                    if (!$timestamp) return false;
+                    if ($startDate && $timestamp < strtotime($startDate)) return false;
+                    if ($endDate && $timestamp > strtotime($endDate) + 86400) return false;
+                    return true;
+                }));
+                
+                // Sort ascending for proper display
+                usort($utilizations, function($a, $b) {
+                    return strtotime($a['created_at'] ?? '0') - strtotime($b['created_at'] ?? '0');
                 });
             }
             
-            // Calculate utilization hours
-            $utilizationHours = $this->calculateUtilizationHours($utilizations);
-            $utilizationPercentage = $utilizationHours > 0 ? ($utilizationHours / 8) * 100 : 0;
+            // Set current power and active status
+            $equipment['power_consumption'] = 0;
+            $equipment['is_active'] = false;
             
-            // Get latest power consumption
-            $latestPower = $powerConsumptions[0]['consumption'] ?? 0;
-            
-            // Calculate average power
-            $avgPower = 0;
             if (!empty($powerConsumptions)) {
-                $totalPower = array_sum(array_column($powerConsumptions, 'consumption'));
-                $avgPower = $totalPower / count($powerConsumptions);
-            }
-            
-            // Determine if active (has utilization in the last hour)
-            $isActive = false;
-            if (!empty($utilizations)) {
-                $latestUtilization = $utilizations[0];
-                $latestTime = strtotime($latestUtilization['created_at']);
+                $latestPower = $powerConsumptions[0];
+                $latestTime = strtotime($latestPower['created_at'] ?? '');
                 $oneHourAgo = now()->subHour()->timestamp;
-                $isActive = $latestUtilization['type'] == true && $latestTime >= $oneHourAgo;
+                
+                if ($latestTime && $latestTime >= $oneHourAgo) {
+                    $equipment['power_consumption'] = $latestPower['consumption'] ?? 0;
+                    $equipment['is_active'] = true;
+                }
             }
             
-            return [
-                'equipment_id' => $equipmentId,
-                'equipment_name' => $equipment['equipment_name'] ?? 'Unknown',
-                'owner' => $equipment['owner'] ?? 'Unknown',
-                'expected_location' => $equipment['expected_location'] ?? 'Unknown',
-                'is_active' => $isActive,
-                'utilization_hours_8h' => round($utilizationHours, 2),
-                'utilization_percentage_8h' => round($utilizationPercentage, 2),
-                'power_consumption' => round($latestPower, 2),
-                'avg_power_8h' => round($avgPower, 2),
-                'updated_at' => $equipment['updated_at'] ?? now()->toIso8601String(),
-            ];
+            $equipment['power_consumptions'] = $powerConsumptions;
+            $equipment['utilizations'] = $utilizations;
+            $equipment['updated_at'] = $equipment['updated_at'] ?? now()->toIso8601String();
+            
+            return response()->json($equipment);
         } catch (\Exception $e) {
-            Log::error('Failed to calculate equipment utilization', [
-                'equipment_id' => $equipment['equipment_id'] ?? 'unknown',
+            Log::error('Failed to fetch equipment', [
+                'equipment_id' => $equipmentId,
                 'error' => $e->getMessage()
             ]);
-            return null;
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
