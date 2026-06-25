@@ -3,9 +3,9 @@ import laravel from 'laravel-vite-plugin';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-    server: {
-        port: 5175,
-    },
+    // server: {
+    //     port: 5175,
+    // },
     plugins: [
         laravel({
             input: 'resources/js/app.jsx',
@@ -13,4 +13,7 @@ export default defineConfig({
         }),
         react(),
     ],
+    server: {
+        https: true,
+    },
 });
