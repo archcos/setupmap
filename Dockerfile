@@ -40,12 +40,20 @@ COPY --from=frontend /app/public/build ./public/build
 # Install PHP dependencies
 RUN composer install --no-dev --optimize-autoloader
 
+# Create SQLite database directory and file
+RUN mkdir -p /app/database
+RUN touch /app/database/database.sqlite
+RUN chmod -R 775 /app/database
+
+# Set permissions for storage and cache
+RUN chmod -R 775 storage bootstrap/cache
+
+# Run migrations (if they fail, continue anyway)
+RUN php artisan migrate --force || true
+
 # Clean up unnecessary files
 RUN rm -rf node_modules package*.json vite.config.js postcss.config.js tailwind.config.js
 
-# Set permissions
-RUN chmod -R 775 storage bootstrap/cache
-
 EXPOSE 10000
 
-CMD php artisan serve --host=0.0.0.0 --port=${PORT:-10000}
+CMD php artisan config:cache && php artisan route:cache && php artisan view:cache && php artisan serve --host=0.0.0.0 --port=${PORT:-10000}
