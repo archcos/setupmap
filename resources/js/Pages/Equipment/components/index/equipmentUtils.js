@@ -1,5 +1,5 @@
 // Date utilities
-export const getDateRange = (dateFilter, selectedDate) => {
+export const getDateRange = (dateFilter, selectedDate, customDateRange) => {
   const now = new Date(selectedDate);
   let startDate, endDate;
 
@@ -21,9 +21,20 @@ export const getDateRange = (dateFilter, selectedDate) => {
       endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
       break;
     case 'year':
-      // January 1 to December 31 of selected year
       startDate = new Date(now.getFullYear(), 0, 1);
       endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+      break;
+    case 'custom':
+      if (customDateRange?.startDate && customDateRange?.endDate) {
+        startDate = new Date(customDateRange.startDate);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(customDateRange.endDate);
+        endDate.setHours(23, 59, 59, 999);
+      } else {
+        // Default to current month if no custom range set
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      }
       break;
     default:
       startDate = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -32,7 +43,7 @@ export const getDateRange = (dateFilter, selectedDate) => {
   return { startDate, endDate };
 };
 
-export const getDateLabel = (dateFilter, selectedDate) => {
+export const getDateLabel = (dateFilter, selectedDate, customDateRange) => {
   const now = new Date(selectedDate);
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   
@@ -49,168 +60,249 @@ export const getDateLabel = (dateFilter, selectedDate) => {
       return `${months[now.getMonth()]} ${now.getFullYear()}`;
     case 'year':
       return now.getFullYear().toString();
+    case 'custom':
+      if (customDateRange?.startDate && customDateRange?.endDate) {
+        const start = new Date(customDateRange.startDate);
+        const end = new Date(customDateRange.endDate);
+        return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      }
+      return 'Custom Range';
     default:
       return '';
   }
 };
 
-// Graph data processing - fixed to use API data correctly
-export const processGraphData = (data, startDate, endDate) => {
+// Helper function to calculate working days in a month
+// Helper function to calculate working days in a month
+function getWorkingDaysInMonth(year, month) {
+  let workingDays = 0;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(year, month, day);
+    const dayOfWeek = date.getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      workingDays++;
+    }
+  }
+  
+  return workingDays;
+}
+
+export const processGraphData = (data, startDate, endDate, dateFilter, includeInactive = false) => {
+  console.log('processGraphData called with:', {
+    dataLength: data?.length || 0,
+    startDate,
+    endDate,
+    dateFilter,
+    includeInactive
+  });
+
+  if (!data || !Array.isArray(data) || data.length === 0) {
+    return { 
+      utilizationPeriods: [], 
+      powerData: [], 
+      equipmentList: [],
+      dateFilter,
+      summaryStats: { 
+        avgUtilization: 0, 
+        avgPower: 0,
+        activeEquipmentCount: 0,
+        inactiveEquipmentCount: 0,
+        totalEquipmentCount: 0,
+        totalActiveHours: 0,
+        averageActiveHoursPerEquipment: 0
+      }
+    };
+  }
+
   const startTime = new Date(startDate).getTime();
   const endTime = new Date(endDate).getTime();
   const totalDays = Math.max(1, Math.ceil((endTime - startTime) / (1000 * 60 * 60 * 24)));
-  const isSingleDay = totalDays === 1;
-  const utilization = [];
-  const power = [];
+  
+  const isDayView = dateFilter === 'day' || (dateFilter === 'custom' && totalDays === 1);
+  const isYearView = dateFilter === 'year' || (dateFilter === 'custom' && totalDays > 365);
+  const isMonthOrWeekView = dateFilter === 'month' || dateFilter === 'week' || 
+    (dateFilter === 'custom' && totalDays > 1 && totalDays <= 365);
 
-  if (isSingleDay) {
-    // Single day: aggregate all equipment data by hour
-    for (let h = 0; h < 24; h++) {
-      const hourStart = new Date(startTime);
-      hourStart.setHours(h, 0, 0, 0);
-      const hourEnd = new Date(startTime);
-      hourEnd.setHours(h, 59, 59, 999);
+  // Process each equipment individually
+  let allUtilizationPeriods = [];
+  let allPowerData = [];
+  let equipmentDataMap = {}; // Store per-equipment data
+  let activeEquipment = new Set();
+  let inactiveEquipment = new Set();
+  let totalActiveHoursAll = 0;
+  let equipmentActiveHours = {};
 
-      let totalUtil = 0;
-      let totalPower = 0;
-      let utilCount = 0;
-      let powerCount = 0;
-
-      data.forEach(equipment => {
-        // Get utilizations for this equipment in this hour
-        const hourUtils = equipment.utilizations?.filter(u => {
-          const time = new Date(u.created_at).getTime();
-          return time >= hourStart.getTime() && time <= hourEnd.getTime();
-        }) || [];
-
-        if (hourUtils.length > 0) {
-          const activeCount = hourUtils.filter(u => u.type === true || u.type === 1).length;
-          totalUtil += (activeCount / hourUtils.length) * 100;
-          utilCount++;
-        }
-
-        // Get power consumptions for this equipment in this hour
-        const hourPower = equipment.power_consumptions?.filter(p => {
-          const time = new Date(p.created_at).getTime();
-          return time >= hourStart.getTime() && time <= hourEnd.getTime();
-        }) || [];
-
-        if (hourPower.length > 0) {
-          totalPower += hourPower.reduce((sum, p) => sum + (p.consumption || 0), 0) / hourPower.length;
-          powerCount++;
-        }
-      });
-
-      utilization.push({
-        time: h.toString().padStart(2, '0') + ':00',
-        utilization: utilCount > 0 ? parseFloat((totalUtil / utilCount).toFixed(1)) : 0
-      });
-
-      power.push({
-        time: h.toString().padStart(2, '0') + ':00',
-        power: powerCount > 0 ? parseFloat((totalPower / powerCount).toFixed(1)) : 0
-      });
-    }
-  } else {
-    // Multiple days: aggregate all equipment data by day
-    const currentDate = new Date(startTime);
+  data.forEach(equipment => {
+    const utils = equipment.utilizations || [];
+    const powers = equipment.power_consumptions || [];
     
-    // For year view, show monthly averages instead of daily
-    if (totalDays > 31) {
-      // Show by month
-      for (let m = 0; m < 12; m++) {
-        const monthStart = new Date(currentDate.getFullYear(), m, 1);
-        const monthEnd = new Date(currentDate.getFullYear(), m + 1, 0, 23, 59, 59, 999);
+    let hasUtilizationData = false;
+    let hasPowerData = false;
+    let equipmentPeriods = [];
+    let equipmentPowerData = [];
+    let equipmentActiveHoursTotal = 0;
+    
+    // Process utilization periods for this equipment
+    if (utils.length > 0) {
+      const sortedUtils = [...utils].sort((a, b) => 
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+      
+      const filteredUtils = sortedUtils.filter(u => {
+        if (!u.created_at) return false;
+        const time = new Date(u.created_at).getTime();
+        return time >= startTime && time <= endTime;
+      });
+      
+      if (filteredUtils.length > 0) {
+        hasUtilizationData = true;
         
-        let totalUtil = 0;
-        let totalPower = 0;
-        let utilCount = 0;
-        let powerCount = 0;
-
-        data.forEach(equipment => {
-          const monthUtils = equipment.utilizations?.filter(u => {
-            const time = new Date(u.created_at).getTime();
-            return time >= monthStart.getTime() && time <= monthEnd.getTime();
-          }) || [];
-
-          if (monthUtils.length > 0) {
-            const activeCount = monthUtils.filter(u => u.type === true || u.type === 1).length;
-            totalUtil += (activeCount / monthUtils.length) * 100;
-            utilCount++;
+        // Find active periods
+        let activeStart = null;
+        
+        for (let i = 0; i < filteredUtils.length; i++) {
+          const currentTime = new Date(filteredUtils[i].created_at).getTime();
+          const isActive = filteredUtils[i].type === true || filteredUtils[i].type === 1 || filteredUtils[i].type === 'true';
+          
+          if (isActive && !activeStart) {
+            activeStart = currentTime;
+          } else if (!isActive && activeStart) {
+            const duration = (currentTime - activeStart) / (1000 * 60 * 60);
+            const period = {
+              equipmentId: equipment.equipment_id,
+              equipmentName: equipment.equipment_name,
+              owner: equipment.owner,
+              location: equipment.expected_location,
+              start: new Date(activeStart),
+              end: new Date(currentTime),
+              duration: duration,
+              startTime: activeStart,
+              endTime: currentTime
+            };
+            equipmentPeriods.push(period);
+            allUtilizationPeriods.push(period);
+            equipmentActiveHoursTotal += duration;
+            activeStart = null;
           }
-
-          const monthPower = equipment.power_consumptions?.filter(p => {
-            const time = new Date(p.created_at).getTime();
-            return time >= monthStart.getTime() && time <= monthEnd.getTime();
-          }) || [];
-
-          if (monthPower.length > 0) {
-            totalPower += monthPower.reduce((sum, p) => sum + (p.consumption || 0), 0) / monthPower.length;
-            powerCount++;
-          }
-        });
-
-        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        utilization.push({
-          time: months[m],
-          utilization: utilCount > 0 ? parseFloat((totalUtil / utilCount).toFixed(1)) : 0
-        });
-
-        power.push({
-          time: months[m],
-          power: powerCount > 0 ? parseFloat((totalPower / powerCount).toFixed(1)) : 0
-        });
-      }
-    } else {
-      // Show by day (for week/month view)
-      while (currentDate <= new Date(endTime)) {
-        const dayStart = new Date(currentDate);
-        dayStart.setHours(0, 0, 0, 0);
-        const dayEnd = new Date(currentDate);
-        dayEnd.setHours(23, 59, 59, 999);
-
-        let totalUtil = 0;
-        let totalPower = 0;
-        let utilCount = 0;
-        let powerCount = 0;
-
-        data.forEach(equipment => {
-          const dayUtils = equipment.utilizations?.filter(u => {
-            const time = new Date(u.created_at).getTime();
-            return time >= dayStart.getTime() && time <= dayEnd.getTime();
-          }) || [];
-
-          if (dayUtils.length > 0) {
-            const activeCount = dayUtils.filter(u => u.type === true || u.type === 1).length;
-            totalUtil += (activeCount / dayUtils.length) * 100;
-            utilCount++;
-          }
-
-          const dayPower = equipment.power_consumptions?.filter(p => {
-            const time = new Date(p.created_at).getTime();
-            return time >= dayStart.getTime() && time <= dayEnd.getTime();
-          }) || [];
-
-          if (dayPower.length > 0) {
-            totalPower += dayPower.reduce((sum, p) => sum + (p.consumption || 0), 0) / dayPower.length;
-            powerCount++;
-          }
-        });
-
-        utilization.push({
-          time: currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-          utilization: utilCount > 0 ? parseFloat((totalUtil / utilCount).toFixed(1)) : 0
-        });
-
-        power.push({
-          time: currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-          power: powerCount > 0 ? parseFloat((totalPower / powerCount).toFixed(1)) : 0
-        });
-
-        currentDate.setDate(currentDate.getDate() + 1);
+        }
+        
+        // If still active at the end
+        if (activeStart) {
+          const duration = (endTime - activeStart) / (1000 * 60 * 60);
+          const period = {
+            equipmentId: equipment.equipment_id,
+            equipmentName: equipment.equipment_name,
+            owner: equipment.owner,
+            location: equipment.expected_location,
+            start: new Date(activeStart),
+            end: new Date(endTime),
+            duration: duration,
+            startTime: activeStart,
+            endTime: endTime
+          };
+          equipmentPeriods.push(period);
+          allUtilizationPeriods.push(period);
+          equipmentActiveHoursTotal += duration;
+        }
       }
     }
-  }
+    
+    // Process power data for this equipment
+    if (powers.length > 0) {
+      const filteredPowers = powers.filter(p => {
+        if (!p.created_at) return false;
+        const time = new Date(p.created_at).getTime();
+        return time >= startTime && time <= endTime;
+      }).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      
+      if (filteredPowers.length > 0) {
+        hasPowerData = true;
+        equipmentPowerData = filteredPowers.map(p => ({
+          equipmentId: equipment.equipment_id,
+          equipmentName: equipment.equipment_name,
+          time: new Date(p.created_at),
+          timestamp: new Date(p.created_at).getTime(),
+          power: p.consumption || 0
+        }));
+        allPowerData.push(...equipmentPowerData);
+      }
+    }
+    
+    const hasData = hasUtilizationData || hasPowerData;
+    
+    if (hasData) {
+      activeEquipment.add(equipment.equipment_id);
+      totalActiveHoursAll += equipmentActiveHoursTotal;
+      equipmentActiveHours[equipment.equipment_id] = equipmentActiveHoursTotal;
+      
+      // Store equipment data
+      equipmentDataMap[equipment.equipment_id] = {
+        equipmentId: equipment.equipment_id,
+        equipmentName: equipment.equipment_name,
+        owner: equipment.owner,
+        location: equipment.expected_location,
+        hasUtilizationData,
+        hasPowerData,
+        utilizationPeriods: equipmentPeriods,
+        powerData: equipmentPowerData,
+        totalActiveHours: equipmentActiveHoursTotal,
+        averagePower: equipmentPowerData.length > 0 
+          ? equipmentPowerData.reduce((sum, p) => sum + p.power, 0) / equipmentPowerData.length 
+          : 0
+      };
+    } else {
+      inactiveEquipment.add(equipment.equipment_id);
+    }
+  });
 
-  return { utilization, power, isSingleDay };
+  // Sort everything by time
+  allUtilizationPeriods.sort((a, b) => a.startTime - b.startTime);
+  allPowerData.sort((a, b) => a.timestamp - b.timestamp);
+
+  // Create equipment list sorted by active hours (most active first)
+  const equipmentList = Object.values(equipmentDataMap)
+    .sort((a, b) => b.totalActiveHours - a.totalActiveHours);
+
+  // Calculate summary stats
+  const totalEquipment = data.length;
+  const activeCount = activeEquipment.size;
+  const inactiveCount = inactiveEquipment.size;
+  const avgActiveHours = activeCount > 0 ? totalActiveHoursAll / activeCount : 0;
+
+  // Calculate period duration for average utilization
+  const periodDurationHours = (endTime - startTime) / (1000 * 60 * 60);
+  const avgUtilization = periodDurationHours > 0 && activeCount > 0 
+    ? (totalActiveHoursAll / (activeCount * Math.min(periodDurationHours, 24))) * 100 
+    : 0;
+
+  // Calculate average power
+  const avgPower = allPowerData.length > 0 
+    ? allPowerData.reduce((sum, p) => sum + p.power, 0) / allPowerData.length 
+    : 0;
+
+  const summaryStats = {
+    avgUtilization,
+    avgPower,
+    activeEquipmentCount: activeCount,
+    inactiveEquipmentCount: inactiveCount,
+    totalEquipmentCount: totalEquipment,
+    totalActiveHours: totalActiveHoursAll,
+    averageActiveHoursPerEquipment: avgActiveHours
+  };
+
+  return {
+    utilizationPeriods: allUtilizationPeriods,
+    powerData: allPowerData,
+    equipmentList,
+    equipmentDataMap,
+    dateFilter,
+    isDayView,
+    isMonthOrWeekView,
+    isYearView,
+    summaryStats,
+    startTime,
+    endTime
+  };
 };

@@ -319,4 +319,33 @@ class AdminController extends Controller
             return redirect()->route('admin.dashboard')->with('error', 'Failed to restore equipment: ' . $e->getMessage());
         }
     }
+
+    public function changeProject(Request $request, $equipmentId)
+{
+    $oldEquipment = $this->supabaseData->getEquipmentById($equipmentId);
+    
+    if (!$oldEquipment) {
+        return back()->with('error', 'Equipment not found');
+    }
+    
+    $newProjectId = $request->project_id;
+    $newEquipmentId = $this->supabaseData->getNextEquipmentId($newProjectId);
+    
+    $equipmentData = [
+        'project_id' => $newProjectId,
+        'equipment_name' => $request->equipment_name,
+        'owner' => $request->owner,
+        'expected_location' => $request->expected_location,
+        'equipment_specifications' => $request->equipment_specifications,
+    ];
+    
+    $this->supabaseData->updateEquipmentId(
+        $equipmentId, 
+        $newEquipmentId, 
+        $newProjectId, 
+        $equipmentData
+    );
+    
+    return redirect()->back()->with('success', 'Equipment updated with new ID: ' . $newEquipmentId);
+}
 }

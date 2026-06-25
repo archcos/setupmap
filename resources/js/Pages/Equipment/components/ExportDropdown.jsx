@@ -139,66 +139,126 @@ export default function ExportDropdown({
     return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
   };
 
-  // Generate CSV content for equipment details
-  const generateDetailsCSV = () => {
-    const headers = ['Date/Time', 'Utilization (%)', 'Hours', 'Power (W)'];
-    const maxLength = Math.max(utilizationData.length, powerData.length);
+// Replace the generateDetailsCSV function with this:
+
+const generateDetailsCSV = () => {
+    const headers = ['Date/Time', 'Utilization (%)', 'Hours (8h)', 'Power (W)'];
     const rows = [];
     
-    // Group data by day and filter out days with 0 power
-    const dailyData = new Map();
+    const maxLength = Math.max(utilizationData.length, powerData.length);
     
     for (let i = 0; i < maxLength; i++) {
       const utilItem = utilizationData[i] || {};
       const powerItem = powerData[i] || {};
-      const dateKey = utilItem.date || powerItem.date || utilItem.fullDate?.split(' ')[0] || powerItem.fullDate?.split(' ')[0] || '';
       
-      if (dateKey) {
+      const time = utilItem.time || powerItem.time || '';
+      const utilization = utilItem.utilization?.toFixed(2) || '0.00';
+      const power = powerItem.power?.toFixed(2) || '0.00';
+      const hours = ((parseFloat(utilization) / 100) * 8).toFixed(2);
+      
+      if (time && (parseFloat(utilization) > 0 || parseFloat(power) > 0)) {
+        rows.push([utilItem.fullDate || time, utilization, hours, power]);
+      }
+    }
+    
+    if (rows.length > 0 && stats) {
+      rows.push(['', '', '', '']);
+      rows.push(['Summary Statistics', '', '', '']);
+      rows.push(['Average Utilization', `${stats.avgUtilization?.toFixed(2) || '0.00'}%`, '', '']);
+      rows.push(['Peak Utilization', `${stats.peakUtilization?.toFixed(2) || '0.00'}%`, '', '']);
+      rows.push(['Average Power/Day', `${stats.avgPowerPerDay?.toFixed(2) || '0.00'}W`, '', '']);
+      rows.push(['Peak Power', `${stats.peakPower?.toFixed(2) || '0.00'}W`, '', '']);
+      rows.push(['Total Days', `${stats.totalDaysInRange || stats.totalDays || 0}`, '', '']);
+      rows.push(['Active Days', `${stats.activeDays || 0}`, '', '']);
+      rows.push(['Note: 100% Utilization = 8 Hours', '', '', '']);
+    }
+    
+    return [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+  };
+// Replace getActiveDaysData with this:
+
+const getActiveDaysData = () => {
+    const dailyData = new Map();
+    
+    // Process utilization data
+    utilizationData.forEach(item => {
+      const dateKey = item.fullDate 
+        ? new Date(item.fullDate).toISOString().split('T')[0]
+        : item.time;
+      
+      if (dateKey && item.utilization > 0) {
         if (!dailyData.has(dateKey)) {
           dailyData.set(dateKey, { 
             date: dateKey, 
-            totalPower: 0, 
+            totalUtilization: 0,
+            totalPower: 0,
+            entryCount: 0,
             entries: [] 
           });
         }
         
         const dayData = dailyData.get(dateKey);
-        dayData.totalPower += parseFloat(powerItem.power || '0');
-        dayData.entries.push({
-          dateTime: utilItem.fullDate || utilItem.time || powerItem.fullDate || powerItem.time || '',
-          utilization: utilItem.utilization?.toFixed(2) || '0',
-          power: powerItem.power?.toFixed(2) || '0'
+        dayData.totalUtilization += item.utilization || 0;
+        dayData.entryCount++;
+      }
+    });
+    
+    // Process power data
+    powerData.forEach(item => {
+      const dateKey = item.fullDate 
+        ? new Date(item.fullDate).toISOString().split('T')[0]
+        : item.time;
+      
+      if (dateKey && item.power > 0) {
+        if (!dailyData.has(dateKey)) {
+          dailyData.set(dateKey, { 
+            date: dateKey, 
+            totalUtilization: 0,
+            totalPower: 0,
+            entryCount: 0,
+            entries: [] 
+          });
+        }
+        
+        const dayData = dailyData.get(dateKey);
+        dayData.totalPower += item.power || 0;
+        dayData.entryCount++;
+      }
+    });
+    
+    // Combine entries from both datasets
+    const maxLength = Math.max(utilizationData.length, powerData.length);
+    for (let i = 0; i < maxLength; i++) {
+      const utilItem = utilizationData[i] || {};
+      const powerItem = powerData[i] || {};
+      
+      const dateKey = utilItem.fullDate 
+        ? new Date(utilItem.fullDate).toISOString().split('T')[0]
+        : powerItem.fullDate 
+          ? new Date(powerItem.fullDate).toISOString().split('T')[0]
+          : utilItem.time || powerItem.time;
+      
+      if (dateKey && dailyData.has(dateKey)) {
+        dailyData.get(dateKey).entries.push({
+          dateTime: utilItem.fullDate || powerItem.fullDate || utilItem.time || powerItem.time || '',
+          utilization: utilItem.utilization || 0,
+          power: powerItem.power || 0
         });
       }
     }
     
-    // Only include days that have power data
-    const activeDays = Array.from(dailyData.values())
-      .filter(day => day.totalPower > 0);
+    // Separate active and inactive days
+    const allDays = Array.from(dailyData.values());
+    const activeDays = allDays.filter(day => day.totalPower > 0 || day.totalUtilization > 0);
+    const inactiveDays = allDays.filter(day => day.totalPower === 0 && day.totalUtilization === 0);
     
-    activeDays.forEach(day => {
-      day.entries.forEach(entry => {
-        const utilizationValue = parseFloat(entry.utilization);
-        const hours = (utilizationValue / 100 * 8).toFixed(2);
-        rows.push([
-          entry.dateTime,
-          entry.utilization,
-          hours,
-          entry.power
-        ]);
-      });
-    });
-    
-    // Add summary row
-    if (activeDays.length > 0) {
-      const totalDays = dailyData.size;
-      const excludedDays = totalDays - activeDays.length;
-      rows.push(['', '', '', '']);
-      rows.push(['Note: 100% Utilization = 8 Hours', '', '', '']);
-      rows.push([`Only ${activeDays.length} days with utilization shown. ${excludedDays} days with no activity excluded.`, '', '', '']);
-    }
-    
-    return [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+    return {
+      activeDays,
+      inactiveDays,
+      totalDays: allDays.length || 1,
+      activeDaysCount: activeDays.length,
+      inactiveDaysCount: inactiveDays.length
+    };
   };
 
   // Download CSV
@@ -239,57 +299,7 @@ export default function ExportDropdown({
     }
   };
 
-  // Get active days data (days with power > 0)
-  const getActiveDaysData = () => {
-    const maxLength = Math.max(utilizationData.length, powerData.length);
-    const dailyData = new Map();
-    
-    for (let i = 0; i < maxLength; i++) {
-      const utilItem = utilizationData[i] || {};
-      const powerItem = powerData[i] || {};
-      const dateKey = utilItem.date || powerItem.date || 
-                      (utilItem.fullDate ? utilItem.fullDate.split(' ')[0] : '') || 
-                      (powerItem.fullDate ? powerItem.fullDate.split(' ')[0] : '') || '';
-      
-      if (dateKey) {
-        if (!dailyData.has(dateKey)) {
-          dailyData.set(dateKey, { 
-            date: dateKey, 
-            totalPower: 0, 
-            totalUtilization: 0,
-            entryCount: 0,
-            entries: [] 
-          });
-        }
-        
-        const dayData = dailyData.get(dateKey);
-        const power = parseFloat(powerItem.power || '0');
-        const utilization = parseFloat(utilItem.utilization || '0');
-        
-        dayData.totalPower += power;
-        dayData.totalUtilization += utilization;
-        dayData.entryCount++;
-        dayData.entries.push({
-          dateTime: utilItem.fullDate || utilItem.time || powerItem.fullDate || powerItem.time || '',
-          utilization: utilization,
-          power: power
-        });
-      }
-    }
-    
-    // Separate active and inactive days
-    const allDays = Array.from(dailyData.values());
-    const activeDays = allDays.filter(day => day.totalPower > 0);
-    const inactiveDays = allDays.filter(day => day.totalPower === 0);
-    
-    return {
-      activeDays,
-      inactiveDays,
-      totalDays: allDays.length,
-      activeDaysCount: activeDays.length,
-      inactiveDaysCount: inactiveDays.length
-    };
-  };
+
 
   // Generate PDF HTML content
   const generatePDFHTML = () => {
@@ -414,32 +424,32 @@ const generateDetailsPDFHTML = (filterDescriptions, filterLabel) => {
           
           <div class="stats-grid">
             <div class="stat-card">
-              <div class="number">${avgUtilizationAllDays.toFixed(2)}%</div>
+              <div class="number">${(stats?.avgUtilization || 0).toFixed(2)}%</div>
               <div class="label">Avg Utilization</div>
-              <div class="tooltip">Across ${daysData.totalDays} days</div>
+              <div class="tooltip">Across ${stats?.totalDaysInRange || stats?.totalDays || 0} days</div>
             </div>
             <div class="stat-card">
-              <div class="number">${peakUtilization.toFixed(2)}%</div>
+              <div class="number green">${(stats?.peakUtilization || 0).toFixed(2)}%</div>
               <div class="label">Peak Utilization</div>
               <div class="tooltip">Highest recorded</div>
             </div>
             <div class="stat-card">
-              <div class="number red">${peakHours.toFixed(2)}h</div>
+              <div class="number red">${(((stats?.peakUtilization || 0) / 100) * 8).toFixed(2)}h</div>
               <div class="label">Peak Hours</div>
-              <div class="tooltip">${peakUtilization.toFixed(2)}% of 8h</div>
+              <div class="tooltip">${(stats?.peakUtilization || 0).toFixed(2)}% of 8h</div>
             </div>
             <div class="stat-card">
-              <div class="number purple">${avgHoursPerDay.toFixed(2)}h</div>
+              <div class="number purple">${(((stats?.avgUtilization || 0) / 100) * 8).toFixed(2)}h</div>
               <div class="label">Avg Hours/Day</div>
               <div class="tooltip">Of 8h expected per day</div>
             </div>
             <div class="stat-card">
-              <div class="number orange">${avgPowerPerDay.toFixed(2)}W</div>
+              <div class="number orange">${(stats?.avgPowerPerDay || 0).toFixed(2)}W</div>
               <div class="label">Avg Power/Day</div>
-              <div class="tooltip">Across ${daysData.totalDays} days</div>
+              <div class="tooltip">Across ${stats?.totalDaysInRange || stats?.totalDays || 0} days</div>
             </div>
             <div class="stat-card">
-              <div class="number orange">${peakPower.toFixed(2)}W</div>
+              <div class="number orange">${(stats?.peakPower || 0).toFixed(2)}W</div>
               <div class="label">Peak Power</div>
               <div class="tooltip">Highest recorded</div>
             </div>

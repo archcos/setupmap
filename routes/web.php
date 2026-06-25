@@ -33,6 +33,8 @@ Route::prefix('admin')->group(function () {
         Route::post('/equipment', [AdminController::class, 'store'])->name('admin.equipment.store');
         Route::put('/equipment/{id}', [AdminController::class, 'update'])->name('admin.equipment.update');
         Route::delete('/equipment/{id}', [AdminController::class, 'destroy'])->name('admin.equipment.destroy');
+        Route::put('/equipment/{equipmentId}/change-project', [AdminController::class, 'changeProject']);
+
         
         // Optional: Equipment restore route
         Route::post('/equipment/{id}/restore', [AdminController::class, 'restore'])->name('admin.equipment.restore');

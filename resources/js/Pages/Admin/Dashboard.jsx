@@ -117,9 +117,10 @@ export default function AdminDashboard({ equipments = [], projects = [], adminUs
     });
   };
 
-  const handleEdit = (e) => {
+const handleEdit = (e) => {
     e.preventDefault();
     
+    // Validation
     if (!editForm.data.project_id) {
       alert('Please select a project');
       return;
@@ -142,8 +143,11 @@ export default function AdminDashboard({ equipments = [], projects = [], adminUs
       return;
     }
 
-    // Confirm if project is being changed
-    if (editForm.data.project_id !== editingEquipment?.project_id) {
+    // Check if project is being changed
+    const isProjectChanged = editForm.data.project_id !== editingEquipment?.project_id;
+    
+    if (isProjectChanged) {
+      // Confirm project change with user
       const confirmed = window.confirm(
         '⚠️ You are changing the project for this equipment.\n\n' +
         'This will:\n' +
@@ -155,22 +159,55 @@ export default function AdminDashboard({ equipments = [], projects = [], adminUs
       );
       
       if (!confirmed) return;
-    }
 
-    editForm.put(`/admin/equipment/${editingEquipment.equipment_id}`, {
-      onSuccess: () => {
-        setShowEditModal(false);
-        setEditingEquipment(null);
-        editForm.reset();
-        setEditProjectSearch('');
-        setShowEditProjectDropdown(false);
-        setShowEditLocationDropdown(false);
-      },
-      onError: (errors) => {
-        console.error('Update failed:', errors);
-        alert('Failed to update equipment. Please check your input and try again.');
-      }
-    });
+      // Use the special change-project endpoint for project changes
+      editForm.put(`/admin/equipment/${editingEquipment.equipment_id}/change-project`, {
+        onSuccess: (page) => {
+          setShowEditModal(false);
+          setEditingEquipment(null);
+          editForm.reset();
+          setEditProjectSearch('');
+          setShowEditProjectDropdown(false);
+          setShowEditLocationDropdown(false);
+          
+          // Show success message with new ID if available
+          if (page.props.flash?.success) {
+            // Flash message will be handled by the page reload
+          }
+        },
+        onError: (errors) => {
+          console.error('Project change failed:', errors);
+          alert('Failed to change project. Please try again.');
+        },
+        onFinish: () => {
+          // Clean up processing state if needed
+        }
+      });
+    } else {
+      // Normal update (project not changed)
+      editForm.put(`/admin/equipment/${editingEquipment.equipment_id}`, {
+        preserveScroll: true,
+        onSuccess: () => {
+          setShowEditModal(false);
+          setEditingEquipment(null);
+          editForm.reset();
+          setEditProjectSearch('');
+          setShowEditProjectDropdown(false);
+          setShowEditLocationDropdown(false);
+        },
+        onError: (errors) => {
+          console.error('Update failed:', errors);
+          
+          // Show specific error messages if available
+          const errorMessages = Object.values(errors).flat();
+          if (errorMessages.length > 0) {
+            alert('Failed to update equipment:\n• ' + errorMessages.join('\n• '));
+          } else {
+            alert('Failed to update equipment. Please check your input and try again.');
+          }
+        }
+      });
+    }
   };
 
   const openEditModal = (equipment) => {
